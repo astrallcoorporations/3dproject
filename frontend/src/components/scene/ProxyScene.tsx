@@ -52,7 +52,7 @@ function BoneProxy({
 
   return (
     <group
-      position={[(startX + endX) / 2 + transform.position[0], (startY + endY) / 2 + transform.position[1], transform.position[2]}
+      position={[(startX + endX) / 2 + transform.position[0], (startY + endY) / 2 + transform.position[1], transform.position[2]]}
       rotation={[transform.rotation[0], transform.rotation[1], baseAngle + transform.rotation[2]]}
     >
       {selected && <mesh position={[0, 0, -0.03]}><planeGeometry args={[length + 0.14, bone.proxyWidth / 70 + 0.14]} /><meshBasicMaterial color="#ff6842" /></mesh>}
