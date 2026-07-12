@@ -62,9 +62,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     try {
       const target = get().project ?? (await get().createProject("Untitled puppet"));
       const asset = await api.uploadAsset(target.id, file);
-      set({
-        project: { ...target, assets: [...target.assets, asset], activeAssetId: asset.id },
-        mode: "refine",
+      set((state) => {
+        const current = state.project ?? target;
+        return {
+          project: { ...current, assets: [...current.assets, asset], activeAssetId: asset.id },
+          mode: "refine",
+        };
       });
       return asset;
     } catch (error) {
@@ -87,9 +90,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set({ busy: true, error: null });
     try {
       const refined = await api.refineAsset(activeAsset.id, settings);
-      set({
-        project: { ...project, assets: [...project.assets, refined], activeAssetId: refined.id },
-        mode: "rig",
+      set((state) => {
+        const current = state.project ?? project;
+        return {
+          project: { ...current, assets: [...current.assets, refined], activeAssetId: refined.id },
+          mode: "rig",
+        };
       });
       return refined;
     } catch (error) {
