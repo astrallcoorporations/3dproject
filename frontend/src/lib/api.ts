@@ -1,6 +1,8 @@
 import type { Asset, ProjectRecord, Rig, Timeline } from "../types/project";
 
-const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+const apiBase =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? "http://localhost:5000" : "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, init);
