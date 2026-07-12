@@ -6,7 +6,6 @@
         },
         "backend": {
             "root": "backend",
-            "framework": "none",
             "runtime": "python",
             "entrypoint": "run.py"
         }
