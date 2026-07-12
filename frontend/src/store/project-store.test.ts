@@ -38,6 +38,9 @@ describe("useProjectStore", () => {
       paletteSize: 12,
       busy: false,
       error: null,
+      activeJoint: "neck",
+      selectedBoneId: null,
+      cropMode: false,
     });
   });
 
@@ -94,5 +97,82 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().project?.activeAssetId).toBe(2);
     expect(useProjectStore.getState().project?.assets).toEqual([original, refined]);
     expect(useProjectStore.getState().mode).toBe("rig");
+  });
+
+  it("placeJoint records a joint's position and derives bones from the joint map", () => {
+    useProjectStore.setState({ project: makeProject({ id: 9 }) });
+
+    useProjectStore.getState().placeJoint("leftShoulder", { x: 0.2, y: 0.3 });
+    useProjectStore.getState().placeJoint("leftElbow", { x: 0.25, y: 0.5 });
+
+    const { rig } = useProjectStore.getState().project!;
+    expect(rig.joints.leftShoulder).toEqual({ x: 0.2, y: 0.3 });
+    expect(rig.joints.leftElbow).toEqual({ x: 0.25, y: 0.5 });
+    expect(rig.bones.map((bone) => bone.id)).toContain("leftUpperArm");
+  });
+
+  it("placeJoint overwrites a previously placed joint of the same name", () => {
+    useProjectStore.setState({ project: makeProject({ id: 9 }) });
+
+    useProjectStore.getState().placeJoint("neck", { x: 0.1, y: 0.1 });
+    useProjectStore.getState().placeJoint("neck", { x: 0.4, y: 0.6 });
+
+    expect(useProjectStore.getState().project!.rig.joints.neck).toEqual({ x: 0.4, y: 0.6 });
+  });
+
+  it("placeJoint does nothing when there is no active project", () => {
+    useProjectStore.getState().placeJoint("neck", { x: 0.1, y: 0.1 });
+
+    expect(useProjectStore.getState().project).toBeNull();
+  });
+
+  it("updateSelection updates the matching bone's selection rectangle", () => {
+    const bone = {
+      id: "leftUpperArm",
+      label: "L. upper arm",
+      start: "leftShoulder" as const,
+      end: "leftElbow" as const,
+      parentId: null,
+      proxyWidth: 16,
+      selection: { x: 0, y: 0, width: 0, height: 0 },
+    };
+    useProjectStore.setState({
+      project: makeProject({ id: 9, rig: { joints: {}, bones: [bone] } }),
+    });
+
+    useProjectStore.getState().updateSelection("leftUpperArm", { x: 0.1, y: 0.2, width: 0.3, height: 0.4 });
+
+    const updated = useProjectStore.getState().project!.rig.bones[0];
+    expect(updated.selection).toEqual({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 });
+  });
+
+  it("updateSelection ignores selections smaller than the minimum size", () => {
+    const bone = {
+      id: "leftUpperArm",
+      label: "L. upper arm",
+      start: "leftShoulder" as const,
+      end: "leftElbow" as const,
+      parentId: null,
+      proxyWidth: 16,
+      selection: { x: 0, y: 0, width: 0.5, height: 0.5 },
+    };
+    useProjectStore.setState({
+      project: makeProject({ id: 9, rig: { joints: {}, bones: [bone] } }),
+    });
+
+    useProjectStore.getState().updateSelection("leftUpperArm", { x: 0.1, y: 0.2, width: 0.001, height: 0.001 });
+
+    const updated = useProjectStore.getState().project!.rig.bones[0];
+    expect(updated.selection).toEqual({ x: 0, y: 0, width: 0.5, height: 0.5 });
+  });
+
+  it("setActiveJoint, setSelectedBoneId, and setCropMode update rig-mode selection state", () => {
+    useProjectStore.getState().setActiveJoint("leftElbow");
+    useProjectStore.getState().setSelectedBoneId("leftUpperArm");
+    useProjectStore.getState().setCropMode(true);
+
+    expect(useProjectStore.getState().activeJoint).toBe("leftElbow");
+    expect(useProjectStore.getState().selectedBoneId).toBe("leftUpperArm");
+    expect(useProjectStore.getState().cropMode).toBe(true);
   });
 });

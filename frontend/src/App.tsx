@@ -2,24 +2,15 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import { api } from "./lib/api";
 import { interpolatePose } from "./lib/interpolation";
-import { deriveBones } from "./lib/skeleton";
 import { ProxyScene } from "./components/scene/ProxyScene";
 import { Artboard } from "./components/studio/Artboard";
 import { ImportPanel } from "./components/studio/ImportPanel";
-import { JointCanvas } from "./components/studio/JointCanvas";
 import { RefinePanel } from "./components/studio/RefinePanel";
+import { RigPanel } from "./components/studio/RigPanel";
 import { StudioShell } from "./components/studio/StudioShell";
 import { Timeline } from "./components/studio/Timeline";
 import { useProjectStore } from "./store/project-store";
-import type { BonePose, JointName, Keyframe, Mode, Point, Pose, ProjectRecord, Rig, SelectionRect } from "./types/project";
-
-const jointGroups: Array<{ label: string; joints: Array<[JointName, string]> }> = [
-  { label: "TORSO", joints: [["head", "Head"], ["neck", "Neck"]] },
-  { label: "LEFT ARM", joints: [["leftShoulder", "Shoulder"], ["leftElbow", "Elbow"], ["leftWrist", "Wrist"]] },
-  { label: "RIGHT ARM", joints: [["rightShoulder", "Shoulder"], ["rightElbow", "Elbow"], ["rightWrist", "Wrist"]] },
-  { label: "LEFT LEG", joints: [["leftHip", "Hip"], ["leftKnee", "Knee"], ["leftAnkle", "Ankle"]] },
-  { label: "RIGHT LEG", joints: [["rightHip", "Hip"], ["rightKnee", "Knee"], ["rightAnkle", "Ankle"]] },
-];
+import type { BonePose, JointName, Keyframe, Mode, Point, Pose, Rig, SelectionRect } from "./types/project";
 
 const blankRig: Rig = { joints: {}, bones: [] };
 const blankPose: Pose = {};
@@ -35,8 +26,6 @@ const poseAtFrame = (keyframes: Keyframe[], frame: number): Pose => {
   if (before.frame === after.frame) return before.pose;
   return interpolatePose(before.pose, after.pose, (frame - before.frame) / (after.frame - before.frame));
 };
-
-const updateRig = (project: ProjectRecord, nextRig: Rig): ProjectRecord => ({ ...project, rig: nextRig });
 
 export default function App() {
   const project = useProjectStore((state) => state.project);
@@ -55,10 +44,15 @@ export default function App() {
   const uploadAsset = useProjectStore((state) => state.uploadAsset);
   const refineActiveAsset = useProjectStore((state) => state.refineActiveAsset);
   const resetProject = useProjectStore((state) => state.reset);
+  const activeJoint = useProjectStore((state) => state.activeJoint);
+  const setActiveJoint = useProjectStore((state) => state.setActiveJoint);
+  const selectedBoneId = useProjectStore((state) => state.selectedBoneId);
+  const setSelectedBoneId = useProjectStore((state) => state.setSelectedBoneId);
+  const cropMode = useProjectStore((state) => state.cropMode);
+  const setCropMode = useProjectStore((state) => state.setCropMode);
+  const storePlaceJoint = useProjectStore((state) => state.placeJoint);
+  const storeUpdateSelection = useProjectStore((state) => state.updateSelection);
 
-  const [activeJoint, setActiveJoint] = useState<JointName>("neck");
-  const [selectedBoneId, setSelectedBoneId] = useState<string | null>(null);
-  const [cropMode, setCropMode] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [draftPose, setDraftPose] = useState<Pose>(blankPose);
@@ -136,14 +130,13 @@ export default function App() {
 
   const placeJoint = (joint: JointName, point: Point) => {
     if (!project) return;
-    const joints = { ...rig.joints, [joint]: point };
-    setProject(updateRig(project, { joints, bones: deriveBones(joints) }));
+    storePlaceJoint(joint, point);
     setNotice(`${joint.replace(/([A-Z])/g, " $1")} placed.`);
   };
 
   const updateSelection = (boneId: string, selection: SelectionRect) => {
     if (!project || selection.width < 0.01 || selection.height < 0.01) return;
-    setProject(updateRig(project, { ...rig, bones: rig.bones.map((bone) => bone.id === boneId ? { ...bone, selection } : bone) }));
+    storeUpdateSelection(boneId, selection);
     setNotice("Limb art crop updated.");
   };
 
@@ -179,16 +172,23 @@ export default function App() {
   };
 
   const stage = useMemo(() => {
-    if (!activeAsset) {
-      return <Artboard assetUrl={assetUrl} joints={rig.joints} onPlaceJoint={placeJoint} perspectiveGrid={showGrid} />;
-    }
-    if (mode === "animate") {
+    if (activeAsset && mode === "animate") {
       return <ProxyScene rig={rig} pose={viewportPose} assetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />;
     }
-    if (mode === "rig") {
-      return <JointCanvas imageUrl={assetUrl} rig={rig} activeJoint={activeJoint} selectedBoneId={selectedBoneId} cropMode={cropMode} onJointPlace={placeJoint} onSelectionChange={updateSelection} />;
-    }
-    return <Artboard assetUrl={assetUrl} joints={rig.joints} onPlaceJoint={placeJoint} perspectiveGrid={showGrid} assetKind={activeAsset.kind} />;
+    return (
+      <Artboard
+        assetUrl={assetUrl}
+        mode={mode}
+        rig={rig}
+        activeJoint={activeJoint}
+        selectedBoneId={selectedBoneId}
+        cropMode={cropMode}
+        onPlaceJoint={placeJoint}
+        onSelectionChange={updateSelection}
+        perspectiveGrid={showGrid}
+        assetKind={activeAsset?.kind}
+      />
+    );
   }, [activeAsset, activeJoint, assetUrl, cropMode, mode, rig, selectedBoneId, showGrid, viewportPose]);
 
   const leftRail = (
@@ -210,12 +210,17 @@ export default function App() {
           onSkip={() => setMode("rig")}
         />
       </section>}
-      {mode === "rig" && <section className="rail-section rig-tools">
-        <h2>Joint markers</h2><p className="muted">Choose a joint, then place it on the artboard.</p>
-        {jointGroups.map((group) => <div className="joint-group" key={group.label}><span>{group.label}</span>{group.joints.map(([id, label]) => <button key={id} className={activeJoint === id ? "joint-choice active" : "joint-choice"} onClick={() => { setActiveJoint(id); setCropMode(false); }}>{label}</button>)}</div>)}
-        <div className="rig-summary"><span>{Object.keys(rig.joints).length} joints</span><span>{rig.bones.length} bones</span></div>
-        <button className="coral-button full" disabled={!rig.bones.length} onClick={() => setMode("animate")}>Open animation desk →</button>
-      </section>}
+      {mode === "rig" && (
+        <RigPanel
+          activeJoint={activeJoint}
+          rig={rig}
+          onSelectJoint={(joint) => {
+            setActiveJoint(joint);
+            setCropMode(false);
+          }}
+          onOpenAnimate={() => setMode("animate")}
+        />
+      )}
       {mode === "animate" && <section className="rail-section">
         <h2>Pose library</h2><p className="muted">Two keys, one believable in-between.</p>
         <div className="pose-card"><span>A</span><div><b>Frame 00</b><small>{timeline.keyframes.find((keyframe) => keyframe.frame === 0) ? "Keyed" : "Unkeyed"}</small></div><button onClick={() => setPlayhead(0)}>Edit</button></div>

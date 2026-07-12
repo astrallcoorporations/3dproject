@@ -1,14 +1,30 @@
-import type { Asset, JointName, Point, Rig } from "../../types/project";
+import type { Asset, JointName, Mode, Point, Rig, SelectionRect } from "../../types/project";
+import { JointCanvas } from "./JointCanvas";
 
 type ArtboardProps = {
   assetUrl: string;
-  joints: Rig["joints"];
+  mode: Mode;
+  rig: Rig;
+  activeJoint: JointName;
+  selectedBoneId: string | null;
+  cropMode: boolean;
   onPlaceJoint: (joint: JointName, point: Point) => void;
+  onSelectionChange: (boneId: string, selection: SelectionRect) => void;
   perspectiveGrid: boolean;
   assetKind?: Asset["kind"];
 };
 
-export function Artboard({ assetUrl, assetKind }: ArtboardProps) {
+export function Artboard({
+  assetUrl,
+  mode,
+  rig,
+  activeJoint,
+  selectedBoneId,
+  cropMode,
+  onPlaceJoint,
+  onSelectionChange,
+  assetKind,
+}: ArtboardProps) {
   if (!assetUrl) {
     return (
       <label className="empty-stage" htmlFor="art-upload">
@@ -17,6 +33,20 @@ export function Artboard({ assetUrl, assetKind }: ArtboardProps) {
         <p>Import a transparent PNG, a clean JPEG, or a scanned drawing to begin.</p>
         <span className="coral-button">Import artwork</span>
       </label>
+    );
+  }
+
+  if (mode === "rig") {
+    return (
+      <JointCanvas
+        imageUrl={assetUrl}
+        rig={rig}
+        activeJoint={activeJoint}
+        selectedBoneId={selectedBoneId}
+        cropMode={cropMode}
+        onJointPlace={onPlaceJoint}
+        onSelectionChange={onSelectionChange}
+      />
     );
   }
 

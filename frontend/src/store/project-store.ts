@@ -1,7 +1,8 @@
 import { create } from "zustand";
 
 import { api } from "../lib/api";
-import type { Asset, Mode, ProjectRecord } from "../types/project";
+import { deriveBones } from "../lib/skeleton";
+import type { Asset, JointName, Mode, Point, ProjectRecord, SelectionRect } from "../types/project";
 
 export type RefineSettings = { contrast: number; cleanup: boolean; paletteSize: number };
 
@@ -13,6 +14,9 @@ type ProjectState = {
   paletteSize: number;
   busy: boolean;
   error: string | null;
+  activeJoint: JointName;
+  selectedBoneId: string | null;
+  cropMode: boolean;
 };
 
 type ProjectActions = {
@@ -22,6 +26,11 @@ type ProjectActions = {
   setCleanup: (cleanup: boolean) => void;
   setPaletteSize: (paletteSize: number) => void;
   setBusy: (busy: boolean) => void;
+  setActiveJoint: (joint: JointName) => void;
+  setSelectedBoneId: (boneId: string | null) => void;
+  setCropMode: (cropMode: boolean) => void;
+  placeJoint: (joint: JointName, point: Point) => void;
+  updateSelection: (boneId: string, selection: SelectionRect) => void;
   createProject: (name: string) => Promise<ProjectRecord>;
   uploadAsset: (file: File) => Promise<Asset>;
   refineActiveAsset: (settings: RefineSettings) => Promise<Asset>;
@@ -38,6 +47,9 @@ const initialState: ProjectState = {
   paletteSize: 12,
   busy: false,
   error: null,
+  activeJoint: "neck",
+  selectedBoneId: null,
+  cropMode: false,
 };
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -49,7 +61,31 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setCleanup: (cleanup) => set({ cleanup }),
   setPaletteSize: (paletteSize) => set({ paletteSize }),
   setBusy: (busy) => set({ busy }),
+  setActiveJoint: (activeJoint) => set({ activeJoint }),
+  setSelectedBoneId: (selectedBoneId) => set({ selectedBoneId }),
+  setCropMode: (cropMode) => set({ cropMode }),
   reset: () => set({ ...initialState }),
+
+  placeJoint: (joint, point) => {
+    const { project } = get();
+    if (!project) return;
+    const joints = { ...project.rig.joints, [joint]: point };
+    set({ project: { ...project, rig: { joints, bones: deriveBones(joints) } } });
+  },
+
+  updateSelection: (boneId, selection) => {
+    const { project } = get();
+    if (!project || selection.width < 0.01 || selection.height < 0.01) return;
+    set({
+      project: {
+        ...project,
+        rig: {
+          ...project.rig,
+          bones: project.rig.bones.map((bone) => (bone.id === boneId ? { ...bone, selection } : bone)),
+        },
+      },
+    });
+  },
 
   createProject: async (name) => {
     const created = await api.createProject(name);
