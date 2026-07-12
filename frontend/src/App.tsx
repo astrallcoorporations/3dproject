@@ -4,9 +4,13 @@ import { api } from "./lib/api";
 import { interpolatePose } from "./lib/interpolation";
 import { deriveBones } from "./lib/skeleton";
 import { ProxyScene } from "./components/scene/ProxyScene";
+import { Artboard } from "./components/studio/Artboard";
+import { ImportPanel } from "./components/studio/ImportPanel";
 import { JointCanvas } from "./components/studio/JointCanvas";
+import { RefinePanel } from "./components/studio/RefinePanel";
 import { StudioShell } from "./components/studio/StudioShell";
 import { Timeline } from "./components/studio/Timeline";
+import { useProjectStore } from "./store/project-store";
 import type { BonePose, JointName, Keyframe, Mode, Point, Pose, ProjectRecord, Rig, SelectionRect } from "./types/project";
 
 const jointGroups: Array<{ label: string; joints: Array<[JointName, string]> }> = [
@@ -35,21 +39,32 @@ const poseAtFrame = (keyframes: Keyframe[], frame: number): Pose => {
 const updateRig = (project: ProjectRecord, nextRig: Rig): ProjectRecord => ({ ...project, rig: nextRig });
 
 export default function App() {
-  const [project, setProject] = useState<ProjectRecord | null>(null);
-  const [mode, setMode] = useState<Mode>("refine");
+  const project = useProjectStore((state) => state.project);
+  const mode = useProjectStore((state) => state.mode);
+  const contrast = useProjectStore((state) => state.contrast);
+  const cleanup = useProjectStore((state) => state.cleanup);
+  const paletteSize = useProjectStore((state) => state.paletteSize);
+  const busy = useProjectStore((state) => state.busy);
+  const refineError = useProjectStore((state) => state.error);
+  const setProject = useProjectStore((state) => state.setProject);
+  const setMode = useProjectStore((state) => state.setMode);
+  const setContrast = useProjectStore((state) => state.setContrast);
+  const setCleanup = useProjectStore((state) => state.setCleanup);
+  const setPaletteSize = useProjectStore((state) => state.setPaletteSize);
+  const setBusy = useProjectStore((state) => state.setBusy);
+  const uploadAsset = useProjectStore((state) => state.uploadAsset);
+  const refineActiveAsset = useProjectStore((state) => state.refineActiveAsset);
+  const resetProject = useProjectStore((state) => state.reset);
+
   const [activeJoint, setActiveJoint] = useState<JointName>("neck");
   const [selectedBoneId, setSelectedBoneId] = useState<string | null>(null);
   const [cropMode, setCropMode] = useState(false);
-  const [contrast, setContrast] = useState(1.18);
-  const [cleanup, setCleanup] = useState(true);
-  const [paletteSize, setPaletteSize] = useState(12);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [draftPose, setDraftPose] = useState<Pose>(blankPose);
   const [showGrid, setShowGrid] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [railOpen, setRailOpen] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("Import artwork to begin a new puppet.");
 
   const rig = project?.rig ?? blankRig;
@@ -93,12 +108,6 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [playing, timeline.fps]);
 
-  const createProject = async () => {
-    const created = await api.createProject("Untitled puppet");
-    setProject(created);
-    return created;
-  };
-
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -107,32 +116,21 @@ export default function App() {
       setNotice("Choose an image smaller than 12 MB.");
       return;
     }
-    setBusy(true);
     try {
-      const target = project ?? (await createProject());
-      const asset = await api.uploadAsset(target.id, file);
-      setProject({ ...target, assets: [...target.assets, asset], activeAssetId: asset.id });
-      setMode("refine");
+      await uploadAsset(file);
       setNotice("Artwork imported. Use cleanup if this began as a scan, or move straight into rigging.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Puppet could not import that image.");
-    } finally {
-      setBusy(false);
     }
   };
 
   const refine = async () => {
-    if (!project || !activeAsset) return;
-    setBusy(true);
+    if (!activeAsset) return;
     try {
-      const refined = await api.refineAsset(activeAsset.id, { contrast, cleanup, paletteSize });
-      setProject({ ...project, assets: [...project.assets, refined], activeAssetId: refined.id });
+      await refineActiveAsset({ contrast, cleanup, paletteSize });
       setNotice("Refinement applied. The cleaned art is now your active rigging source.");
-      setMode("rig");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Puppet could not refine that artwork.");
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -182,7 +180,7 @@ export default function App() {
 
   const stage = useMemo(() => {
     if (!activeAsset) {
-      return <label className="empty-stage" htmlFor="art-upload"><span className="empty-figure">✦</span><strong>Give your character a body.</strong><p>Import a transparent PNG, a clean JPEG, or a scanned drawing to begin.</p><span className="coral-button">Import artwork</span></label>;
+      return <Artboard assetUrl={assetUrl} joints={rig.joints} onPlaceJoint={placeJoint} perspectiveGrid={showGrid} />;
     }
     if (mode === "animate") {
       return <ProxyScene rig={rig} pose={viewportPose} assetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />;
@@ -190,20 +188,27 @@ export default function App() {
     if (mode === "rig") {
       return <JointCanvas imageUrl={assetUrl} rig={rig} activeJoint={activeJoint} selectedBoneId={selectedBoneId} cropMode={cropMode} onJointPlace={placeJoint} onSelectionChange={updateSelection} />;
     }
-    return <div className="refine-stage"><div className="paper-note">{activeAsset.kind === "refined" ? "ACTIVE REFINED ART" : "ORIGINAL ART"}</div><img src={assetUrl} alt="Artwork prepared for refinement" /></div>;
+    return <Artboard assetUrl={assetUrl} joints={rig.joints} onPlaceJoint={placeJoint} perspectiveGrid={showGrid} assetKind={activeAsset.kind} />;
   }, [activeAsset, activeJoint, assetUrl, cropMode, mode, rig, selectedBoneId, showGrid, viewportPose]);
 
   const leftRail = (
     <>
       <div className="rail-header"><span>WORKFLOW</span><b>{mode === "refine" ? "01" : mode === "rig" ? "02" : "03"}</b></div>
       {mode === "refine" && <section className="rail-section">
-        <h2>Source art</h2><p className="muted">Keep the original. Puppet creates a cleaned copy when you refine.</p>
-        <label className="upload-card" htmlFor="art-upload"><span>↥</span><b>{activeAsset ? "Replace artwork" : "Choose artwork"}</b><small>PNG · JPEG · WebP</small></label>
-        <div className="control-block"><label>Contrast <output>{contrast.toFixed(2)}×</output></label><input type="range" min="0.7" max="1.7" step="0.01" value={contrast} onChange={(event) => setContrast(Number(event.target.value))} /></div>
-        <label className="toggle-row"><span>Line cleanup<small>Reduce scan noise</small></span><input type="checkbox" checked={cleanup} onChange={(event) => setCleanup(event.target.checked)} /></label>
-        <div className="control-block"><label>Palette <output>{paletteSize} colors</output></label><input type="range" min="4" max="32" step="4" value={paletteSize} onChange={(event) => setPaletteSize(Number(event.target.value))} /></div>
-        <button className="coral-button full" disabled={!activeAsset || busy} onClick={refine}>{busy ? "Refining…" : "Apply cleanup"}</button>
-        <button className="text-button" disabled={!activeAsset} onClick={() => setMode("rig")}>Skip to rigging →</button>
+        <ImportPanel hasActiveAsset={!!activeAsset} />
+        <RefinePanel
+          hasActiveAsset={!!activeAsset}
+          contrast={contrast}
+          cleanup={cleanup}
+          paletteSize={paletteSize}
+          busy={busy}
+          error={refineError}
+          onContrastChange={setContrast}
+          onCleanupChange={setCleanup}
+          onPaletteSizeChange={setPaletteSize}
+          onApply={refine}
+          onSkip={() => setMode("rig")}
+        />
       </section>}
       {mode === "rig" && <section className="rail-section rig-tools">
         <h2>Joint markers</h2><p className="muted">Choose a joint, then place it on the artboard.</p>
@@ -242,7 +247,7 @@ export default function App() {
     <div className="brand"><i>✦</i><span>PUPPET</span></div>
     <div className="project-name"><small>LOCAL STUDIO</small><b>{project?.name ?? "New character"}</b></div>
     <nav className="mode-switcher" aria-label="Studio mode">{(["refine", "rig", "animate"] as Mode[]).map((item) => <button key={item} className={mode === item ? "current" : ""} onClick={() => activeAsset ? setMode(item) : setNotice("Import artwork before opening that desk.")}>{item}</button>)}</nav>
-    <div className="top-actions"><button className="grid-button" onClick={() => setShowGrid(!showGrid)} aria-pressed={showGrid}>⌘ Grid</button><button className="save-button" disabled={!project || busy} onClick={persist}>Save local</button><button className="avatar" onClick={() => { setProject(null); setMode("refine"); setNotice("A fresh puppet is ready for artwork."); }} aria-label="Start a new puppet">+</button></div>
+    <div className="top-actions"><button className="grid-button" onClick={() => setShowGrid(!showGrid)} aria-pressed={showGrid}>⌘ Grid</button><button className="save-button" disabled={!project || busy} onClick={persist}>Save local</button><button className="avatar" onClick={() => { resetProject(); setNotice("A fresh puppet is ready for artwork."); }} aria-label="Start a new puppet">+</button></div>
   </>;
 
   const timelinePanel = rig.bones.length ? <Timeline frame={playhead} keyframes={timeline.keyframes} playing={playing} onFrameChange={(frame) => { setPlaying(false); setPlayhead(frame); }} onPlayToggle={() => { if (!timeline.keyframes.length) setNotice("Place joints and save a pose first."); else setPlaying(!playing); }} onSaveKeyframe={saveKeyframe} /> : <div className="timeline dormant"><div className="timeline-toolbar"><span>POSE TIMELINE</span><em>Build a connected rig to unlock 24 fps playback.</em></div></div>;
