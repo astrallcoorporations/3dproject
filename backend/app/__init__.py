@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 from flask import Flask
 from flask_cors import CORS
 
@@ -8,13 +12,15 @@ from app.models import db
 
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
+    storage_root = Path(tempfile.gettempdir()) if os.getenv("VERCEL") else Path(app.instance_path)
+    storage_root.mkdir(parents=True, exist_ok=True)
     app.config.from_mapping(
         SECRET_KEY="puppet-local",
         TESTING=False,
-        SQLALCHEMY_DATABASE_URI="sqlite:///puppet.db",
+        SQLALCHEMY_DATABASE_URI=f"sqlite:///{storage_root / 'puppet.db'}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         MAX_CONTENT_LENGTH=12 * 1024 * 1024,
-        UPLOAD_FOLDER=str(app.instance_path + "/uploads"),
+        UPLOAD_FOLDER=str(storage_root / "uploads"),
     )
     if test_config:
         app.config.update(test_config)
