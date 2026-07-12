@@ -66,6 +66,7 @@ export default function App() {
   const activeAsset = project?.assets.find((asset) => asset.id === project.activeAssetId) ?? project?.assets.at(-1);
   const assetUrl = api.assetUrl(activeAsset);
   const selectedBone = rig.bones.find((bone) => bone.id === selectedBoneId) ?? null;
+  const canAnimate = !!activeAsset && rig.bones.length > 0;
   const viewportPose = playing ? poseAtFrame(timeline.keyframes, playhead) : draftPose;
   const selectedPose = selectedBone ? (draftPose[selectedBone.id] ?? blankBonePose) : blankBonePose;
 
@@ -251,7 +252,20 @@ export default function App() {
   const topbar = <>
     <div className="brand"><i>✦</i><span>PUPPET</span></div>
     <div className="project-name"><small>LOCAL STUDIO</small><b>{project?.name ?? "New character"}</b></div>
-    <nav className="mode-switcher" aria-label="Studio mode">{(["refine", "rig", "animate"] as Mode[]).map((item) => <button key={item} className={mode === item ? "current" : ""} onClick={() => activeAsset ? setMode(item) : setNotice("Import artwork before opening that desk.")}>{item}</button>)}</nav>
+    <nav className="mode-switcher" aria-label="Studio mode">{(["refine", "rig", "animate"] as Mode[]).map((item) => {
+      const disabled = item === "animate" ? !canAnimate : !activeAsset;
+      return (
+        <button key={item} className={mode === item ? "current" : ""} disabled={disabled} onClick={() => {
+          if (disabled) {
+            setNotice(item === "animate" ? "Create a rig before opening Animate." : "Import artwork before opening that desk.");
+            return;
+          }
+          setMode(item);
+        }}>
+          {item}
+        </button>
+      );
+    })}</nav>
     <div className="top-actions"><button className="grid-button" onClick={() => setShowGrid(!showGrid)} aria-pressed={showGrid}>⌘ Grid</button><button className="save-button" disabled={!project || busy} onClick={persist}>Save local</button><button className="avatar" onClick={() => { resetProject(); setNotice("A fresh puppet is ready for artwork."); }} aria-label="Start a new puppet">+</button></div>
   </>;
 
