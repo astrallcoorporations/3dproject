@@ -5,9 +5,11 @@ import { interpolatePose } from "./lib/interpolation";
 import { ProxyScene } from "./components/scene/ProxyScene";
 import { Artboard } from "./components/studio/Artboard";
 import { ImportPanel } from "./components/studio/ImportPanel";
+import { Inspector } from "./components/studio/Inspector";
 import { RefinePanel } from "./components/studio/RefinePanel";
 import { RigPanel } from "./components/studio/RigPanel";
 import { StudioShell } from "./components/studio/StudioShell";
+import { TopBar } from "./components/studio/TopBar";
 import { Timeline } from "./components/studio/Timeline";
 import { useProjectStore } from "./store/project-store";
 import type { BonePose, JointName, Keyframe, Mode, Point, Pose, Rig, SelectionRect } from "./types/project";
@@ -215,43 +217,48 @@ export default function App() {
     </>
   );
 
+  const handleModeChange = (item: Mode) => {
+    const disabled = item === "animate" ? !canAnimate : !activeAsset;
+    if (disabled) {
+      setNotice(item === "animate" ? "Create a rig before opening Animate." : "Import artwork before opening that desk.");
+      return;
+    }
+    setMode(item);
+  };
+
   const inspector = (
-    <>
-      <div className="rail-header"><span>INSPECTOR</span><button className="collapse-button" onClick={() => setInspectorOpen(false)} aria-label="Collapse inspector">›</button></div>
-      {!selectedBone ? <div className="inspector-empty"><b>Select a limb</b><p>Place connected joints to create a bone, then choose it here.</p></div> : <section className="rail-section inspector-content">
-        <div className="bone-chip"><span>●</span><div><small>SELECTED PROXY</small><b>{selectedBone.label}</b></div></div>
-        {mode === "rig" && <><label className="toggle-row"><span>Crop limb art<small>Drag on the stage</small></span><input type="checkbox" checked={cropMode} onChange={(event) => setCropMode(event.target.checked)} /></label><div className="property-row"><span>Proxy width</span><b>{selectedBone.proxyWidth}px</b></div></>}
-        {mode === "animate" && <div className="transform-controls">
-          <h3>Pose transform</h3>
-          <label>Turn / Y <output>{Math.round((selectedPose.rotation[1] * 180) / Math.PI)}°</output><input type="range" min={-Math.PI} max={Math.PI} step="0.01" value={selectedPose.rotation[1]} onChange={(event) => updateSelectedPose("rotation", 1, Number(event.target.value))} /></label>
-          <label>Lean / Z <output>{Math.round((selectedPose.rotation[2] * 180) / Math.PI)}°</output><input type="range" min={-Math.PI} max={Math.PI} step="0.01" value={selectedPose.rotation[2]} onChange={(event) => updateSelectedPose("rotation", 2, Number(event.target.value))} /></label>
-          <label>Camera depth <output>{selectedPose.position[2].toFixed(1)}</output><input type="range" min="-2" max="2" step="0.05" value={selectedPose.position[2]} onChange={(event) => updateSelectedPose("position", 2, Number(event.target.value))} /></label>
-          <p className="inspector-hint">Turn a proxy toward camera to test real perspective foreshortening.</p>
-        </div>}
-        <div className="bone-list"><span>BONES</span>{rig.bones.map((bone) => <button key={bone.id} className={bone.id === selectedBoneId ? "selected" : ""} onClick={() => setSelectedBoneId(bone.id)}>{bone.label}</button>)}</div>
-      </section>}
-    </>
+    <Inspector
+      mode={mode}
+      rig={rig}
+      selectedBone={selectedBone}
+      selectedBoneId={selectedBoneId}
+      selectedPose={selectedPose}
+      cropMode={cropMode}
+      inspectorOpen={inspectorOpen}
+      onCropModeChange={setCropMode}
+      onSelectBone={setSelectedBoneId}
+      onPoseChange={updateSelectedPose}
+      onCollapse={() => setInspectorOpen(false)}
+    />
   );
 
-  const topbar = <>
-    <div className="brand"><i>✦</i><span>PUPPET</span></div>
-    <div className="project-name"><small>LOCAL STUDIO</small><b>{project?.name ?? "New character"}</b></div>
-    <nav className="mode-switcher" aria-label="Studio mode">{(["refine", "rig", "animate"] as Mode[]).map((item) => {
-      const disabled = item === "animate" ? !canAnimate : !activeAsset;
-      return (
-        <button key={item} className={mode === item ? "current" : ""} disabled={disabled} onClick={() => {
-          if (disabled) {
-            setNotice(item === "animate" ? "Create a rig before opening Animate." : "Import artwork before opening that desk.");
-            return;
-          }
-          setMode(item);
-        }}>
-          {item}
-        </button>
-      );
-    })}</nav>
-    <div className="top-actions"><button className="grid-button" onClick={() => setShowGrid(!showGrid)} aria-pressed={showGrid}>⌘ Grid</button><button className="save-button" disabled={!project || busy} onClick={persist}>Save local</button><button className="avatar" onClick={() => { resetProject(); setNotice("A fresh puppet is ready for artwork."); }} aria-label="Start a new puppet">+</button></div>
-  </>;
+  const topbar = (
+    <TopBar
+      projectName={project?.name ?? "New character"}
+      mode={mode}
+      canAnimate={canAnimate}
+      hasActiveAsset={!!activeAsset}
+      showGrid={showGrid}
+      saveDisabled={!project || busy}
+      onModeChange={handleModeChange}
+      onToggleGrid={() => setShowGrid(!showGrid)}
+      onSave={persist}
+      onNewPuppet={() => {
+        resetProject();
+        setNotice("A fresh puppet is ready for artwork.");
+      }}
+    />
+  );
 
   const timelinePanel = rig.bones.length ? <Timeline frame={playhead} keyframes={timeline.keyframes} playing={playing} onFrameChange={(frame) => { setPlaying(false); setPlayhead(frame); }} onPlayToggle={() => { if (!timeline.keyframes.length) setNotice("Place joints and save a pose first."); else setPlaying(!playing); }} onSaveKeyframe={saveKeyframe} /> : <div className="timeline dormant"><div className="timeline-toolbar"><span>POSE TIMELINE</span><em>Build a connected rig to unlock 24 fps playback.</em></div></div>;
 
