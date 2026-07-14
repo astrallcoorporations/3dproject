@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../lib/api";
 import type { ProjectRecord } from "../types/project";
@@ -41,6 +41,9 @@ describe("useProjectStore", () => {
       activeJoint: "neck",
       selectedBoneId: null,
       cropMode: false,
+      playhead: 0,
+      playing: false,
+      draftPose: {},
     });
   });
 
@@ -174,5 +177,124 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().activeJoint).toBe("leftElbow");
     expect(useProjectStore.getState().selectedBoneId).toBe("leftUpperArm");
     expect(useProjectStore.getState().cropMode).toBe(true);
+  });
+
+  describe("timeline state", () => {
+    afterEach(() => {
+      useProjectStore.getState().setPlaying(false);
+      vi.useRealTimers();
+    });
+
+    it("setPlayhead updates the current frame", () => {
+      useProjectStore.getState().setPlayhead(12);
+
+      expect(useProjectStore.getState().playhead).toBe(12);
+    });
+
+    it("setDraftPose replaces the in-progress pose", () => {
+      const pose = { arm: { rotation: [0, 1, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number] } };
+
+      useProjectStore.getState().setDraftPose(pose);
+
+      expect(useProjectStore.getState().draftPose).toEqual(pose);
+    });
+
+    it("updateDraftPose edits a single axis of a bone's pose, defaulting missing bones to identity", () => {
+      useProjectStore.getState().updateDraftPose("arm", "rotation", 1, Math.PI / 2);
+
+      expect(useProjectStore.getState().draftPose.arm).toEqual({
+        rotation: [0, Math.PI / 2, 0],
+        position: [0, 0, 0],
+      });
+
+      useProjectStore.getState().updateDraftPose("arm", "position", 2, 1.5);
+
+      expect(useProjectStore.getState().draftPose.arm).toEqual({
+        rotation: [0, Math.PI / 2, 0],
+        position: [0, 0, 1.5],
+      });
+    });
+
+    it("saveKeyframe writes the draft pose into the timeline at the given frame, replacing any existing one", () => {
+      const bone = {
+        id: "leftUpperArm",
+        label: "L. upper arm",
+        start: "leftShoulder" as const,
+        end: "leftElbow" as const,
+        parentId: null,
+        proxyWidth: 16,
+        selection: { x: 0, y: 0, width: 0.5, height: 0.5 },
+      };
+      const pose = { leftUpperArm: { rotation: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number] } };
+      useProjectStore.setState({
+        project: makeProject({
+          id: 9,
+          rig: { joints: {}, bones: [bone] },
+          timeline: { fps: 24, keyframes: [{ frame: 5, pose: {} }] },
+        }),
+        draftPose: pose,
+      });
+
+      useProjectStore.getState().saveKeyframe(5);
+
+      const { keyframes } = useProjectStore.getState().project!.timeline;
+      expect(keyframes).toEqual([{ frame: 5, pose }]);
+    });
+
+    it("saveKeyframe does nothing without an active project or an empty rig", () => {
+      useProjectStore.setState({ project: null });
+
+      useProjectStore.getState().saveKeyframe(0);
+
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+
+    it("setPlaying(true) advances the playhead frame by frame at the project's fps", () => {
+      vi.useFakeTimers();
+      useProjectStore.setState({
+        project: makeProject({ timeline: { fps: 24, keyframes: [] } }),
+        playhead: 0,
+        playing: false,
+      });
+
+      useProjectStore.getState().setPlaying(true);
+      expect(useProjectStore.getState().playing).toBe(true);
+
+      vi.advanceTimersByTime(100);
+
+      expect(useProjectStore.getState().playhead).toBeGreaterThan(0);
+    });
+
+    it("playback stops and resets the playhead to 0 once it reaches frame 24", () => {
+      vi.useFakeTimers();
+      useProjectStore.setState({
+        project: makeProject({ timeline: { fps: 24, keyframes: [] } }),
+        playhead: 23,
+        playing: false,
+      });
+
+      useProjectStore.getState().setPlaying(true);
+      vi.advanceTimersByTime(200);
+
+      expect(useProjectStore.getState().playhead).toBe(0);
+      expect(useProjectStore.getState().playing).toBe(false);
+    });
+
+    it("setPlaying(false) stops the playback loop from advancing further", () => {
+      vi.useFakeTimers();
+      useProjectStore.setState({
+        project: makeProject({ timeline: { fps: 24, keyframes: [] } }),
+        playhead: 0,
+        playing: false,
+      });
+
+      useProjectStore.getState().setPlaying(true);
+      vi.advanceTimersByTime(50);
+      useProjectStore.getState().setPlaying(false);
+      const frameAfterStop = useProjectStore.getState().playhead;
+      vi.advanceTimersByTime(500);
+
+      expect(useProjectStore.getState().playhead).toBe(frameAfterStop);
+    });
   });
 });

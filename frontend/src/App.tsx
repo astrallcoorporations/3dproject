@@ -52,10 +52,15 @@ export default function App() {
   const setCropMode = useProjectStore((state) => state.setCropMode);
   const storePlaceJoint = useProjectStore((state) => state.placeJoint);
   const storeUpdateSelection = useProjectStore((state) => state.updateSelection);
+  const playhead = useProjectStore((state) => state.playhead);
+  const playing = useProjectStore((state) => state.playing);
+  const draftPose = useProjectStore((state) => state.draftPose);
+  const setPlayhead = useProjectStore((state) => state.setPlayhead);
+  const setPlaying = useProjectStore((state) => state.setPlaying);
+  const setDraftPose = useProjectStore((state) => state.setDraftPose);
+  const storeUpdateDraftPose = useProjectStore((state) => state.updateDraftPose);
+  const storeSaveKeyframe = useProjectStore((state) => state.saveKeyframe);
 
-  const [playhead, setPlayhead] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [draftPose, setDraftPose] = useState<Pose>(blankPose);
   const [showGrid, setShowGrid] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [railOpen, setRailOpen] = useState(true);
@@ -87,21 +92,7 @@ export default function App() {
 
   useEffect(() => {
     if (!playing) setDraftPose(poseAtFrame(timeline.keyframes, playhead));
-  }, [playhead, playing, timeline.keyframes]);
-
-  useEffect(() => {
-    if (!playing) return undefined;
-    const timer = window.setInterval(() => {
-      setPlayhead((frame) => {
-        if (frame >= 24) {
-          setPlaying(false);
-          return 0;
-        }
-        return frame + 1;
-      });
-    }, 1000 / timeline.fps);
-    return () => window.clearInterval(timer);
-  }, [playing, timeline.fps]);
+  }, [playhead, playing, timeline.keyframes, setDraftPose]);
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -143,19 +134,12 @@ export default function App() {
 
   const updateSelectedPose = (field: "rotation" | "position", axis: number, value: number) => {
     if (!selectedBone) return;
-    setDraftPose((current) => {
-      const currentBone = current[selectedBone.id] ?? blankBonePose;
-      const next = [...currentBone[field]] as [number, number, number];
-      next[axis] = value;
-      return { ...current, [selectedBone.id]: { ...currentBone, [field]: next } };
-    });
+    storeUpdateDraftPose(selectedBone.id, field, axis, value);
   };
 
   const saveKeyframe = () => {
     if (!project || !rig.bones.length) return;
-    const keyframes = timeline.keyframes.filter((keyframe) => keyframe.frame !== playhead);
-    keyframes.push({ frame: playhead, pose: draftPose });
-    setProject({ ...project, timeline: { ...timeline, keyframes: keyframes.sort((a, b) => a.frame - b.frame) } });
+    storeSaveKeyframe(playhead);
     setNotice(`Pose saved at frame ${playhead}.`);
   };
 
