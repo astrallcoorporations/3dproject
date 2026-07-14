@@ -16,11 +16,15 @@ local owner (`studio-local`), and uploaded artwork is stored on disk under
 
 ## 1. Start the API
 
+The virtualenv lives at the repository root (`./.venv`) — `frontend/playwright.config.ts`
+resolves it from there to run the API for the end-to-end test, so keep it
+there rather than under `backend/`.
+
 ```sh
+python -m venv .venv                # from the repo root, first time only
+.venv\Scripts\activate               # Windows (use `source .venv/bin/activate` on macOS/Linux)
+pip install -r backend/requirements.txt   # first time only
 cd backend
-python -m venv .venv               # first time only
-.venv\Scripts\activate              # Windows (use `source .venv/bin/activate` on macOS/Linux)
-pip install -r requirements.txt     # first time only
 python -m flask --app run run --port 5000
 ```
 
