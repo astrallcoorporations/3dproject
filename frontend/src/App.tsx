@@ -158,7 +158,7 @@ export default function App() {
 
   const stage = useMemo(() => {
     if (activeAsset && mode === "animate") {
-      return <ProxyScene rig={rig} pose={viewportPose} assetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />;
+      return <ProxyScene rig={rig} pose={viewportPose} activeAssetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />;
     }
     return (
       <Artboard
