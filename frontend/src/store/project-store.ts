@@ -70,7 +70,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     const joints = { ...project.rig.joints, [joint]: point };
-    set({ project: { ...project, rig: { joints, bones: deriveBones(joints) } } });
+    const existing = new Map(project.rig.bones.map((bone) => [bone.id, bone]));
+    const bones = deriveBones(joints).map((bone) => ({
+      ...bone,
+      selection: existing.get(bone.id)?.selection ?? bone.selection,
+    }));
+    set({ project: { ...project, rig: { joints, bones } } });
   },
 
   updateSelection: (boneId, selection) => {
