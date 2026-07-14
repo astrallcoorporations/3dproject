@@ -1,8 +1,11 @@
 import { create } from "zustand";
 
 import { api } from "../lib/api";
+import { ACTIVE_PROJECT_STORAGE_KEY, safeStorage } from "../lib/local-storage";
 import { deriveBones } from "../lib/skeleton";
 import type { Asset, BonePose, JointName, Mode, Point, Pose, ProjectRecord, SelectionRect } from "../types/project";
+
+export { ACTIVE_PROJECT_STORAGE_KEY };
 
 export type RefineSettings = { contrast: number; cleanup: boolean; paletteSize: number };
 
@@ -37,6 +40,7 @@ type ProjectActions = {
   placeJoint: (joint: JointName, point: Point) => void;
   updateSelection: (boneId: string, selection: SelectionRect) => void;
   createProject: (name: string) => Promise<ProjectRecord>;
+  restoreProject: () => Promise<ProjectRecord | null>;
   uploadAsset: (file: File) => Promise<Asset>;
   refineActiveAsset: (settings: RefineSettings) => Promise<Asset>;
   setPlayhead: (frame: number) => void;
@@ -188,6 +192,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       return created;
     },
 
+    restoreProject: async () => {
+      if (get().project) return get().project;
+      const storedId = safeStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
+      if (!storedId) return null;
+      try {
+        const restored = await api.getProject(Number(storedId));
+        set({ project: restored });
+        return restored;
+      } catch {
+        safeStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+        return null;
+      }
+    },
+
     uploadAsset: async (file) => {
       set({ busy: true, error: null });
       try {
@@ -238,4 +256,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       }
     },
   };
+});
+
+// Keep the active project id mirrored to storage so `restoreProject` can
+// find it again after a full page reload. Runs as a subscription (rather
+// than inline in every action) so every code path that changes `project`
+// — including future ones — stays covered automatically.
+useProjectStore.subscribe((state, previous) => {
+  if (state.project?.id === previous.project?.id) return;
+  if (state.project) {
+    safeStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, String(state.project.id));
+  } else {
+    safeStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+  }
 });

@@ -8,6 +8,7 @@ import type { ProjectRecord } from "./types/project";
 vi.mock("./lib/api", () => ({
   api: {
     createProject: vi.fn(),
+    getProject: vi.fn(),
     updateProject: vi.fn(),
     uploadAsset: vi.fn(),
     refineAsset: vi.fn(),

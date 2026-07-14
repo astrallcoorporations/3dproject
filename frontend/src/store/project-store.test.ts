@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../lib/api";
+import { ACTIVE_PROJECT_STORAGE_KEY, safeStorage } from "../lib/local-storage";
 import type { ProjectRecord } from "../types/project";
 import { useProjectStore } from "./project-store";
 
 vi.mock("../lib/api", () => ({
   api: {
     createProject: vi.fn(),
+    getProject: vi.fn(),
     updateProject: vi.fn(),
     uploadAsset: vi.fn(),
     refineAsset: vi.fn(),
@@ -28,8 +30,10 @@ const makeProject = (overrides: Partial<ProjectRecord> = {}): ProjectRecord => (
 describe("useProjectStore", () => {
   beforeEach(() => {
     vi.mocked(api.createProject).mockReset();
+    vi.mocked(api.getProject).mockReset();
     vi.mocked(api.uploadAsset).mockReset();
     vi.mocked(api.refineAsset).mockReset();
+    safeStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
     useProjectStore.setState({
       project: null,
       mode: "refine",
@@ -100,6 +104,56 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().project?.activeAssetId).toBe(2);
     expect(useProjectStore.getState().project?.assets).toEqual([original, refined]);
     expect(useProjectStore.getState().mode).toBe("rig");
+  });
+
+  it("createProject remembers the active project id in storage", async () => {
+    const created = makeProject({ id: 42, name: "New puppet" });
+    vi.mocked(api.createProject).mockResolvedValue(created);
+
+    await useProjectStore.getState().createProject("New puppet");
+
+    expect(safeStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY)).toBe("42");
+  });
+
+  it("restoreProject does nothing when no project id was ever saved", async () => {
+    const result = await useProjectStore.getState().restoreProject();
+
+    expect(result).toBeNull();
+    expect(api.getProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().project).toBeNull();
+  });
+
+  it("restoreProject fetches and hydrates the project remembered in storage", async () => {
+    const restored = makeProject({ id: 42, name: "Remembered puppet" });
+    safeStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, "42");
+    vi.mocked(api.getProject).mockResolvedValue(restored);
+
+    const result = await useProjectStore.getState().restoreProject();
+
+    expect(api.getProject).toHaveBeenCalledWith(42);
+    expect(result).toEqual(restored);
+    expect(useProjectStore.getState().project).toEqual(restored);
+  });
+
+  it("restoreProject clears the stale id and leaves the studio blank when the fetch fails", async () => {
+    safeStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, "999");
+    vi.mocked(api.getProject).mockRejectedValue(new Error("Project not found."));
+
+    const result = await useProjectStore.getState().restoreProject();
+
+    expect(result).toBeNull();
+    expect(useProjectStore.getState().project).toBeNull();
+    expect(safeStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("restoreProject is a no-op when a project is already active", async () => {
+    const active = makeProject({ id: 5 });
+    useProjectStore.setState({ project: active });
+
+    const result = await useProjectStore.getState().restoreProject();
+
+    expect(result).toEqual(active);
+    expect(api.getProject).not.toHaveBeenCalled();
   });
 
   it("placeJoint records a joint's position and derives bones from the joint map", () => {

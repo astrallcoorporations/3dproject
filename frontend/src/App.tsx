@@ -43,6 +43,7 @@ export default function App() {
   const setCleanup = useProjectStore((state) => state.setCleanup);
   const setPaletteSize = useProjectStore((state) => state.setPaletteSize);
   const setBusy = useProjectStore((state) => state.setBusy);
+  const restoreProject = useProjectStore((state) => state.restoreProject);
   const uploadAsset = useProjectStore((state) => state.uploadAsset);
   const refineActiveAsset = useProjectStore((state) => state.refineActiveAsset);
   const resetProject = useProjectStore((state) => state.reset);
@@ -82,6 +83,12 @@ export default function App() {
       setSelectedBoneId(rig.bones[0]?.id ?? null);
     }
   }, [rig.bones, selectedBoneId]);
+
+  // Restore the last active project (its asset, rig, and timeline) on a
+  // fresh page load so reloading the studio does not lose local work.
+  useEffect(() => {
+    restoreProject();
+  }, []);
 
   useEffect(() => {
     if (!project || !rig.bones.length || timeline.keyframes.length) return;

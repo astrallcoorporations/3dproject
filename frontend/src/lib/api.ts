@@ -29,6 +29,7 @@ export const api = {
         body: JSON.stringify({ name }),
       }),
     ),
+  getProject: async (id: number) => normalizeProject(await request<ProjectRecord>(`/api/projects/${id}`)),
   updateProject: async (id: number, data: { rig?: Rig; timeline?: Timeline; activeAssetId?: number }) =>
     normalizeProject(
       await request<ProjectRecord>(`/api/projects/${id}`, {
