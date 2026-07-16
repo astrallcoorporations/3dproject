@@ -48,6 +48,7 @@ type ProjectActions = {
   setDraftPose: (pose: Pose) => void;
   updateDraftPose: (boneId: string, field: "rotation" | "position", axis: number, value: number) => void;
   saveKeyframe: (frame: number) => void;
+  deleteKeyframe: (frame: number) => void;
   reset: () => void;
 };
 
@@ -151,6 +152,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         project: {
           ...project,
           timeline: { ...project.timeline, keyframes: keyframes.sort((a, b) => a.frame - b.frame) },
+        },
+      });
+    },
+
+    deleteKeyframe: (frame) => {
+      const { project } = get();
+      if (!project) return;
+      const keyframes = project.timeline.keyframes.filter((keyframe) => keyframe.frame !== frame);
+      if (keyframes.length === project.timeline.keyframes.length) return;
+      set({
+        project: {
+          ...project,
+          timeline: { ...project.timeline, keyframes },
         },
       });
     },

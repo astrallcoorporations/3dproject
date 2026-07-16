@@ -8,6 +8,7 @@ import { Artboard } from "./components/studio/Artboard";
 import { ErrorBoundary } from "./components/studio/ErrorBoundary";
 import { ImportPanel } from "./components/studio/ImportPanel";
 import { Inspector } from "./components/studio/Inspector";
+import { PoseLibrary } from "./components/studio/PoseLibrary";
 import { RefinePanel } from "./components/studio/RefinePanel";
 import { RigPanel } from "./components/studio/RigPanel";
 import { StudioShell } from "./components/studio/StudioShell";
@@ -65,6 +66,7 @@ export default function App() {
   const setDraftPose = useProjectStore((state) => state.setDraftPose);
   const storeUpdateDraftPose = useProjectStore((state) => state.updateDraftPose);
   const storeSaveKeyframe = useProjectStore((state) => state.saveKeyframe);
+  const storeDeleteKeyframe = useProjectStore((state) => state.deleteKeyframe);
 
   const [showGrid, setShowGrid] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -221,12 +223,15 @@ export default function App() {
           onOpenAnimate={() => setMode("animate")}
         />
       )}
-      {mode === "animate" && <section className="rail-section">
-        <h2>Pose library</h2><p className="muted">Two keys, one believable in-between.</p>
-        <div className="pose-card"><span>A</span><div><b>Frame 00</b><small>{timeline.keyframes.find((keyframe) => keyframe.frame === 0) ? "Keyed" : "Unkeyed"}</small></div><button onClick={() => setPlayhead(0)}>Edit</button></div>
-        <div className="pose-card"><span>B</span><div><b>Frame 24</b><small>{timeline.keyframes.find((keyframe) => keyframe.frame === 24) ? "Keyed" : "Unkeyed"}</small></div><button onClick={() => setPlayhead(24)}>Edit</button></div>
-        <button className="text-button" onClick={() => setMode("rig")}>← Return to rigging</button>
-      </section>}
+      {mode === "animate" && (
+        <PoseLibrary
+          keyframes={timeline.keyframes}
+          playhead={playhead}
+          onEdit={setPlayhead}
+          onDelete={storeDeleteKeyframe}
+          onReturnToRig={() => setMode("rig")}
+        />
+      )}
     </>
   );
 

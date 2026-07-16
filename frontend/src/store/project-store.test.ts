@@ -303,6 +303,50 @@ describe("useProjectStore", () => {
       expect(useProjectStore.getState().project).toBeNull();
     });
 
+    it("deleteKeyframe removes the keyframe at the given frame", () => {
+      useProjectStore.setState({
+        project: makeProject({
+          id: 9,
+          timeline: {
+            fps: 24,
+            keyframes: [
+              { frame: 0, pose: {} },
+              { frame: 12, pose: {} },
+              { frame: 24, pose: {} },
+            ],
+          },
+        }),
+      });
+
+      useProjectStore.getState().deleteKeyframe(12);
+
+      const { keyframes } = useProjectStore.getState().project!.timeline;
+      expect(keyframes).toEqual([
+        { frame: 0, pose: {} },
+        { frame: 24, pose: {} },
+      ]);
+    });
+
+    it("deleteKeyframe is a no-op when no keyframe exists at that frame", () => {
+      const project = makeProject({
+        id: 9,
+        timeline: { fps: 24, keyframes: [{ frame: 0, pose: {} }] },
+      });
+      useProjectStore.setState({ project });
+
+      useProjectStore.getState().deleteKeyframe(12);
+
+      expect(useProjectStore.getState().project!.timeline.keyframes).toEqual([{ frame: 0, pose: {} }]);
+    });
+
+    it("deleteKeyframe does nothing without an active project", () => {
+      useProjectStore.setState({ project: null });
+
+      useProjectStore.getState().deleteKeyframe(0);
+
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+
     it("setPlaying(true) advances the playhead frame by frame at the project's fps", () => {
       vi.useFakeTimers();
       useProjectStore.setState({
