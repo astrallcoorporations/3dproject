@@ -7,8 +7,11 @@ type InspectorProps = {
   selectedBoneId: string | null;
   selectedPose: BonePose;
   cropMode: boolean;
+  sketchMode: boolean;
   inspectorOpen: boolean;
   onCropModeChange: (value: boolean) => void;
+  onSketchModeChange: (value: boolean) => void;
+  onClearSketch: () => void;
   onSelectBone: (boneId: string) => void;
   onPoseChange: (field: "rotation" | "position", axis: number, value: number) => void;
   onCollapse: () => void;
@@ -21,8 +24,11 @@ export function Inspector({
   selectedBoneId,
   selectedPose,
   cropMode,
+  sketchMode,
   inspectorOpen,
   onCropModeChange,
+  onSketchModeChange,
+  onClearSketch,
   onSelectBone,
   onPoseChange,
   onCollapse,
@@ -58,6 +64,11 @@ export function Inspector({
           )}
           {mode === "animate" && (
             <div className="transform-controls">
+              <label className="toggle-row">
+                <span>Sketch mode<small>Draw on the stage</small></span>
+                <input type="checkbox" checked={sketchMode} onChange={(event) => onSketchModeChange(event.target.checked)} />
+              </label>
+              <button type="button" className="text-button" onClick={onClearSketch}>Clear sketch</button>
               <h3>Pose transform</h3>
               <label>
                 Turn / Y <output>{Math.round((selectedPose.rotation[1] * 180) / Math.PI)}°</output>

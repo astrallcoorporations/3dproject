@@ -18,7 +18,6 @@ export type JointName =
 
 export type Point = { x: number; y: number };
 export type SelectionRect = { x: number; y: number; width: number; height: number };
-export type Stroke = Point[];
 
 export type Bone = {
   id: string;
@@ -38,7 +37,7 @@ export type Rig = {
 export type BonePose = { rotation: [number, number, number]; position: [number, number, number] };
 export type Pose = Record<string, BonePose>;
 export type Easing = "linear" | "easeInOut";
-export type Keyframe = { frame: number; pose: Pose; easing?: Easing; sketch?: Stroke[] };
+export type Keyframe = { frame: number; pose: Pose; easing?: Easing };
 
 export type Timeline = { fps: number; keyframes: Keyframe[] };
 

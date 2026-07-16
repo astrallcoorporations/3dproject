@@ -1,0 +1,298 @@
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+
+import { api } from "./lib/api";
+import { applyEasing, interpolatePose } from "./lib/interpolation";
+import { createDefaultPose } from "./lib/skeleton";
+import { ProxyScene } from "./components/scene/ProxyScene";
+import { Artboard } from "./components/studio/Artboard";
+import { ErrorBoundary } from "./components/studio/ErrorBoundary";
+import { ImportPanel } from "./components/studio/ImportPanel";
+import { Inspector } from "./components/studio/Inspector";
+import { PoseLibrary } from "./components/studio/PoseLibrary";
+import { RefinePanel } from "./components/studio/RefinePanel";
+import { RigPanel } from "./components/studio/RigPanel";
+import { StudioShell } from "./components/studio/StudioShell";
+import { TopBar } from "./components/studio/TopBar";
+import { Timeline } from "./components/studio/Timeline";
+import { useProjectStore } from "./store/project-store";
+import type { BonePose, JointName, Keyframe, Mode, Point, Pose, Rig, SelectionRect } from "./types/project";
+
+const blankRig: Rig = { joints: {}, bones: [] };
+const blankPose: Pose = {};
+const blankBonePose: BonePose = { rotation: [0, 0, 0], position: [0, 0, 0] };
+
+const poseAtFrame = (keyframes: Keyframe[], frame: number): Pose => {
+  const ordered = [...keyframes].sort((a, b) => a.frame - b.frame);
+  if (!ordered.length) return blankPose;
+  if (frame <= ordered[0].frame) return ordered[0].pose;
+  const after = ordered.find((keyframe) => keyframe.frame >= frame);
+  if (!after) return ordered[ordered.length - 1].pose;
+  const before = [...ordered].reverse().find((keyframe) => keyframe.frame <= frame)!;
+  if (before.frame === after.frame) return before.pose;
+  // The easing chosen for a keyframe shapes the segment leading into it -
+  // apply it to the raw progress fraction before handing it to interpolatePose.
+  const t = applyEasing((frame - before.frame) / (after.frame - before.frame), after.easing ?? "linear");
+  return interpolatePose(before.pose, after.pose, t);
+};
+
+export default function App() {
+  const project = useProjectStore((state) => state.project);
+  const mode = useProjectStore((state) => state.mode);
+  const contrast = useProjectStore((state) => state.contrast);
+  const cleanup = useProjectStore((state) => state.cleanup);
+  const paletteSize = useProjectStore((state) => state.paletteSize);
+  const busy = useProjectStore((state) => state.busy);
+  const refineError = useProjectStore((state) => state.error);
+  const setProject = useProjectStore((state) => state.setProject);
+  const setMode = useProjectStore((state) => state.setMode);
+  const setContrast = useProjectStore((state) => state.setContrast);
+  const setCleanup = useProjectStore((state) => state.setCleanup);
+  const setPaletteSize = useProjectStore((state) => state.setPaletteSize);
+  const setBusy = useProjectStore((state) => state.setBusy);
+  const restoreProject = useProjectStore((state) => state.restoreProject);
+  const uploadAsset = useProjectStore((state) => state.uploadAsset);
+  const refineActiveAsset = useProjectStore((state) => state.refineActiveAsset);
+  const resetProject = useProjectStore((state) => state.reset);
+  const activeJoint = useProjectStore((state) => state.activeJoint);
+  const setActiveJoint = useProjectStore((state) => state.setActiveJoint);
+  const selectedBoneId = useProjectStore((state) => state.selectedBoneId);
+  const setSelectedBoneId = useProjectStore((state) => state.setSelectedBoneId);
+  const cropMode = useProjectStore((state) => state.cropMode);
+  const setCropMode = useProjectStore((state) => state.setCropMode);
+  const storePlaceJoint = useProjectStore((state) => state.placeJoint);
+  const storeUpdateSelection = useProjectStore((state) => state.updateSelection);
+  const playhead = useProjectStore((state) => state.playhead);
+  const playing = useProjectStore((state) => state.playing);
+  const draftPose = useProjectStore((state) => state.draftPose);
+  const setPlayhead = useProjectStore((state) => state.setPlayhead);
+  const setPlaying = useProjectStore((state) => state.setPlaying);
+  const setDraftPose = useProjectStore((state) => state.setDraftPose);
+  const storeUpdateDraftPose = useProjectStore((state) => state.updateDraftPose);
+  const storeSaveKeyframe = useProjectStore((state) => state.saveKeyframe);
+  const storeDeleteKeyframe = useProjectStore((state) => state.deleteKeyframe);
+  const storeSetKeyframeEasing = useProjectStore((state) => state.setKeyframeEasing);
+
+  const [showGrid, setShowGrid] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [railOpen, setRailOpen] = useState(true);
+  const [notice, setNotice] = useState("Import artwork to begin a new puppet.");
+
+  const rig = project?.rig ?? blankRig;
+  const timeline = project?.timeline ?? { fps: 24, keyframes: [] };
+  const activeAsset = project?.assets.find((asset) => asset.id === project.activeAssetId) ?? project?.assets.at(-1);
+  const assetUrl = api.assetUrl(activeAsset);
+  const selectedBone = rig.bones.find((bone) => bone.id === selectedBoneId) ?? null;
+  const canAnimate = !!activeAsset && rig.bones.length > 0;
+  const viewportPose = playing ? poseAtFrame(timeline.keyframes, playhead) : draftPose;
+  const selectedPose = selectedBone ? (draftPose[selectedBone.id] ?? blankBonePose) : blankBonePose;
+
+  useEffect(() => {
+    if (!selectedBoneId || !rig.bones.some((bone) => bone.id === selectedBoneId)) {
+      setSelectedBoneId(rig.bones[0]?.id ?? null);
+    }
+  }, [rig.bones, selectedBoneId]);
+
+  // Restore the last active project (its asset, rig, and timeline) on a
+  // fresh page load so reloading the studio does not lose local work.
+  useEffect(() => {
+    restoreProject();
+  }, []);
+
+  useEffect(() => {
+    if (!project || !rig.bones.length || timeline.keyframes.length) return;
+    setProject({
+      ...project,
+      timeline: { fps: 24, keyframes: [{ frame: 0, pose: {} }, { frame: 24, pose: createDefaultPose(rig.bones) }] },
+    });
+    setNotice("Rig ready. Pose frame 0, save it, then create a contrasting pose at frame 24.");
+  }, [project, rig.bones.length, timeline.keyframes.length]);
+
+  useEffect(() => {
+    if (!playing) setDraftPose(poseAtFrame(timeline.keyframes, playhead));
+  }, [playhead, playing, timeline.keyframes, setDraftPose]);
+
+  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) {
+      setNotice("Choose an image smaller than 12 MB.");
+      return;
+    }
+    try {
+      await uploadAsset(file);
+      setNotice("Artwork imported. Use cleanup if this began as a scan, or move straight into rigging.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Puppet could not import that image.");
+    }
+  };
+
+  const refine = async () => {
+    if (!activeAsset) return;
+    try {
+      await refineActiveAsset({ contrast, cleanup, paletteSize });
+      setNotice("Refinement applied. The cleaned art is now your active rigging source.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Puppet could not refine that artwork.");
+    }
+  };
+
+  const placeJoint = (joint: JointName, point: Point) => {
+    if (!project) return;
+    storePlaceJoint(joint, point);
+    setNotice(`${joint.replace(/([A-Z])/g, " $1")} placed.`);
+  };
+
+  const updateSelection = (boneId: string, selection: SelectionRect) => {
+    if (!project || selection.width < 0.01 || selection.height < 0.01) return;
+    storeUpdateSelection(boneId, selection);
+    setNotice("Limb art crop updated.");
+  };
+
+  const updateSelectedPose = (field: "rotation" | "position", axis: number, value: number) => {
+    if (!selectedBone) return;
+    storeUpdateDraftPose(selectedBone.id, field, axis, value);
+  };
+
+  const saveKeyframe = () => {
+    if (!project || !rig.bones.length) return;
+    storeSaveKeyframe(playhead);
+    setNotice(`Pose saved at frame ${playhead}.`);
+  };
+
+  const changeEasing = (easing: Keyframe["easing"]) => {
+    if (!project || !easing) return;
+    storeSetKeyframeEasing(playhead, easing);
+    setNotice(`Frame ${playhead} now eases ${easing === "easeInOut" ? "in and out" : "linearly"}.`);
+  };
+
+  const persist = async () => {
+    if (!project) return;
+    setBusy(true);
+    try {
+      setProject(await api.updateProject(project.id, { rig: project.rig, timeline: project.timeline, activeAssetId: project.activeAssetId ?? undefined }));
+      setNotice("Rig and timeline saved to Local Studio.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Puppet could not save this project.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stage = useMemo(() => {
+    if (activeAsset && mode === "animate") {
+      return (
+        <ErrorBoundary>
+          <ProxyScene rig={rig} pose={viewportPose} activeAssetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />
+        </ErrorBoundary>
+      );
+    }
+    return (
+      <Artboard
+        assetUrl={assetUrl}
+        mode={mode}
+        rig={rig}
+        activeJoint={activeJoint}
+        selectedBoneId={selectedBoneId}
+        cropMode={cropMode}
+        onPlaceJoint={placeJoint}
+        onSelectionChange={updateSelection}
+        perspectiveGrid={showGrid}
+        assetKind={activeAsset?.kind}
+      />
+    );
+  }, [activeAsset, activeJoint, assetUrl, cropMode, mode, rig, selectedBoneId, showGrid, viewportPose]);
+
+  const leftRail = (
+    <>
+      <div className="rail-header"><span>WORKFLOW</span><b>{mode === "refine" ? "01" : mode === "rig" ? "02" : "03"}</b></div>
+      {mode === "refine" && <section className="rail-section">
+        <ImportPanel hasActiveAsset={!!activeAsset} />
+        <RefinePanel
+          hasActiveAsset={!!activeAsset}
+          contrast={contrast}
+          cleanup={cleanup}
+          paletteSize={paletteSize}
+          busy={busy}
+          error={refineError}
+          onContrastChange={setContrast}
+          onCleanupChange={setCleanup}
+          onPaletteSizeChange={setPaletteSize}
+          onApply={refine}
+          onSkip={() => setMode("rig")}
+        />
+      </section>}
+      {mode === "rig" && (
+        <RigPanel
+          activeJoint={activeJoint}
+          rig={rig}
+          onSelectJoint={(joint) => {
+            setActiveJoint(joint);
+            setCropMode(false);
+          }}
+          onOpenAnimate={() => setMode("animate")}
+        />
+      )}
+      {mode === "animate" && (
+        <PoseLibrary
+          keyframes={timeline.keyframes}
+          playhead={playhead}
+          onEdit={setPlayhead}
+          onDelete={storeDeleteKeyframe}
+          onReturnToRig={() => setMode("rig")}
+        />
+      )}
+    </>
+  );
+
+  const handleModeChange = (item: Mode) => {
+    const disabled = item === "animate" ? !canAnimate : !activeAsset;
+    if (disabled) {
+      setNotice(item === "animate" ? "Create a rig before opening Animate." : "Import artwork before opening that desk.");
+      return;
+    }
+    setMode(item);
+  };
+
+  const inspector = (
+    <Inspector
+      mode={mode}
+      rig={rig}
+      selectedBone={selectedBone}
+      selectedBoneId={selectedBoneId}
+      selectedPose={selectedPose}
+      cropMode={cropMode}
+      inspectorOpen={inspectorOpen}
+      onCropModeChange={setCropMode}
+      onSelectBone={setSelectedBoneId}
+      onPoseChange={updateSelectedPose}
+      onCollapse={() => setInspectorOpen(false)}
+    />
+  );
+
+  const topbar = (
+    <TopBar
+      projectName={project?.name ?? "New character"}
+      mode={mode}
+      canAnimate={canAnimate}
+      hasActiveAsset={!!activeAsset}
+      showGrid={showGrid}
+      saveDisabled={!project || busy}
+      onModeChange={handleModeChange}
+      onToggleGrid={() => setShowGrid(!showGrid)}
+      onSave={persist}
+      onNewPuppet={() => {
+        resetProject();
+        setNotice("A fresh puppet is ready for artwork.");
+      }}
+    />
+  );
+
+  const timelinePanel = rig.bones.length ? <Timeline frame={playhead} keyframes={timeline.keyframes} playing={playing} onFrameChange={(frame) => { setPlaying(false); setPlayhead(frame); }} onPlayToggle={() => { if (!timeline.keyframes.length) setNotice("Place joints and save a pose first."); else setPlaying(!playing); }} onSaveKeyframe={saveKeyframe} onEasingChange={changeEasing} /> : <div className="timeline dormant"><div className="timeline-toolbar"><span>POSE TIMELINE</span><em>Build a connected rig to unlock 24 fps playback.</em></div></div>;
+
+  return <>
+    <input id="art-upload" className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFile} />
+    <StudioShell topbar={topbar} leftRail={leftRail} stage={<><div className="stage-bar"><span>{mode === "refine" ? "ART PREP" : mode === "rig" ? "SKELETON MAP" : "PROXY VIEWPORT"}</span><span>{mode === "rig" && cropMode ? "DRAG TO CROP SELECTED LIMB" : notice}</span><button onClick={() => setRailOpen(!railOpen)} aria-label="Toggle tools">☰</button></div>{stage}</>} inspector={inspector} timeline={timelinePanel} inspectorOpen={inspectorOpen} railOpen={railOpen} />
+    {!inspectorOpen && <button className="reveal-inspector" onClick={() => setInspectorOpen(true)}>‹ Inspector</button>}
+  </>;
+}

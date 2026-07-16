@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { api } from "../lib/api";
 import { ACTIVE_PROJECT_STORAGE_KEY, safeStorage } from "../lib/local-storage";
 import { deriveBones } from "../lib/skeleton";
-import type { Asset, BonePose, Easing, JointName, Keyframe, Mode, Point, Pose, ProjectRecord, SelectionRect, Stroke } from "../types/project";
+import type { Asset, BonePose, Easing, JointName, Mode, Point, Pose, ProjectRecord, SelectionRect } from "../types/project";
 
 export { ACTIVE_PROJECT_STORAGE_KEY };
 
@@ -25,8 +25,6 @@ type ProjectState = {
   playhead: number;
   playing: boolean;
   draftPose: Pose;
-  draftSketch: Stroke[];
-  sketchMode: boolean;
 };
 
 type ProjectActions = {
@@ -49,9 +47,6 @@ type ProjectActions = {
   setPlaying: (playing: boolean) => void;
   setDraftPose: (pose: Pose) => void;
   updateDraftPose: (boneId: string, field: "rotation" | "position", axis: number, value: number) => void;
-  setSketchMode: (sketchMode: boolean) => void;
-  setDraftSketch: (sketch: Stroke[]) => void;
-  addStroke: (stroke: Stroke) => void;
   saveKeyframe: (frame: number) => void;
   deleteKeyframe: (frame: number) => void;
   setKeyframeEasing: (frame: number, easing: Easing) => void;
@@ -74,8 +69,6 @@ const initialState: ProjectState = {
   playhead: 0,
   playing: false,
   draftPose: {},
-  draftSketch: [],
-  sketchMode: false,
 };
 
 export const useProjectStore = create<ProjectStore>((set, get) => {
@@ -151,22 +144,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       });
     },
 
-    setSketchMode: (sketchMode) => set({ sketchMode }),
-
-    setDraftSketch: (sketch) => set({ draftSketch: sketch }),
-
-    addStroke: (stroke) => set((state) => ({ draftSketch: [...state.draftSketch, stroke] })),
-
     saveKeyframe: (frame) => {
-      const { project, draftPose, draftSketch } = get();
+      const { project, draftPose } = get();
       if (!project || !project.rig.bones.length) return;
       const keyframes = project.timeline.keyframes.filter((keyframe) => keyframe.frame !== frame);
-      const entry: Keyframe = { frame, pose: draftPose };
-      // Sketches are optional and don't interpolate - only attach the field
-      // when there's actually something drawn, so keyframes without a
-      // sketch keep the same shape they always had.
-      if (draftSketch.length) entry.sketch = draftSketch;
-      keyframes.push(entry);
+      keyframes.push({ frame, pose: draftPose });
       set({
         project: {
           ...project,

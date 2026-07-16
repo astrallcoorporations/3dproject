@@ -48,8 +48,6 @@ describe("useProjectStore", () => {
       playhead: 0,
       playing: false,
       draftPose: {},
-      draftSketch: [],
-      sketchMode: false,
     });
   });
 
@@ -255,34 +253,6 @@ describe("useProjectStore", () => {
       expect(useProjectStore.getState().draftPose).toEqual(pose);
     });
 
-    it("setSketchMode toggles sketch mode", () => {
-      useProjectStore.getState().setSketchMode(true);
-
-      expect(useProjectStore.getState().sketchMode).toBe(true);
-
-      useProjectStore.getState().setSketchMode(false);
-
-      expect(useProjectStore.getState().sketchMode).toBe(false);
-    });
-
-    it("setDraftSketch replaces the in-progress sketch", () => {
-      const sketch = [[{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }]];
-
-      useProjectStore.getState().setDraftSketch(sketch);
-
-      expect(useProjectStore.getState().draftSketch).toEqual(sketch);
-    });
-
-    it("addStroke appends a stroke to the in-progress sketch", () => {
-      const firstStroke = [{ x: 0, y: 0 }, { x: 0.1, y: 0.1 }];
-      const secondStroke = [{ x: 0.5, y: 0.5 }];
-
-      useProjectStore.getState().addStroke(firstStroke);
-      useProjectStore.getState().addStroke(secondStroke);
-
-      expect(useProjectStore.getState().draftSketch).toEqual([firstStroke, secondStroke]);
-    });
-
     it("updateDraftPose edits a single axis of a bone's pose, defaulting missing bones to identity", () => {
       useProjectStore.getState().updateDraftPose("arm", "rotation", 1, Math.PI / 2);
 
@@ -323,62 +293,6 @@ describe("useProjectStore", () => {
 
       const { keyframes } = useProjectStore.getState().project!.timeline;
       expect(keyframes).toEqual([{ frame: 5, pose }]);
-    });
-
-    it("saveKeyframe bundles the draft sketch into the saved keyframe alongside the pose", () => {
-      const bone = {
-        id: "leftUpperArm",
-        label: "L. upper arm",
-        start: "leftShoulder" as const,
-        end: "leftElbow" as const,
-        parentId: null,
-        proxyWidth: 16,
-        selection: { x: 0, y: 0, width: 0.5, height: 0.5 },
-      };
-      const pose = { leftUpperArm: { rotation: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number] } };
-      const sketch = [[{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.4 }]];
-      useProjectStore.setState({
-        project: makeProject({
-          id: 9,
-          rig: { joints: {}, bones: [bone] },
-          timeline: { fps: 24, keyframes: [{ frame: 5, pose: {} }] },
-        }),
-        draftPose: pose,
-        draftSketch: sketch,
-      });
-
-      useProjectStore.getState().saveKeyframe(5);
-
-      const { keyframes } = useProjectStore.getState().project!.timeline;
-      expect(keyframes).toEqual([{ frame: 5, pose, sketch }]);
-    });
-
-    it("saveKeyframe omits the sketch field when no sketch was drawn", () => {
-      const bone = {
-        id: "leftUpperArm",
-        label: "L. upper arm",
-        start: "leftShoulder" as const,
-        end: "leftElbow" as const,
-        parentId: null,
-        proxyWidth: 16,
-        selection: { x: 0, y: 0, width: 0.5, height: 0.5 },
-      };
-      const pose = { leftUpperArm: { rotation: [0, 0, 0] as [number, number, number], position: [0, 0, 0] as [number, number, number] } };
-      useProjectStore.setState({
-        project: makeProject({
-          id: 9,
-          rig: { joints: {}, bones: [bone] },
-          timeline: { fps: 24, keyframes: [{ frame: 5, pose: {} }] },
-        }),
-        draftPose: pose,
-        draftSketch: [],
-      });
-
-      useProjectStore.getState().saveKeyframe(5);
-
-      const { keyframes } = useProjectStore.getState().project!.timeline;
-      expect(keyframes).toEqual([{ frame: 5, pose }]);
-      expect(keyframes[0].sketch).toBeUndefined();
     });
 
     it("saveKeyframe does nothing without an active project or an empty rig", () => {
