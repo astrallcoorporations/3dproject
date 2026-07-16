@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import { api } from "./lib/api";
 import { interpolatePose } from "./lib/interpolation";
+import { createDefaultPose } from "./lib/skeleton";
 import { ProxyScene } from "./components/scene/ProxyScene";
 import { Artboard } from "./components/studio/Artboard";
+import { ErrorBoundary } from "./components/studio/ErrorBoundary";
 import { ImportPanel } from "./components/studio/ImportPanel";
 import { Inspector } from "./components/studio/Inspector";
 import { RefinePanel } from "./components/studio/RefinePanel";
@@ -94,7 +96,7 @@ export default function App() {
     if (!project || !rig.bones.length || timeline.keyframes.length) return;
     setProject({
       ...project,
-      timeline: { fps: 24, keyframes: [{ frame: 0, pose: {} }, { frame: 24, pose: {} }] },
+      timeline: { fps: 24, keyframes: [{ frame: 0, pose: {} }, { frame: 24, pose: createDefaultPose(rig.bones) }] },
     });
     setNotice("Rig ready. Pose frame 0, save it, then create a contrasting pose at frame 24.");
   }, [project, rig.bones.length, timeline.keyframes.length]);
@@ -167,7 +169,11 @@ export default function App() {
 
   const stage = useMemo(() => {
     if (activeAsset && mode === "animate") {
-      return <ProxyScene rig={rig} pose={viewportPose} activeAssetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />;
+      return (
+        <ErrorBoundary>
+          <ProxyScene rig={rig} pose={viewportPose} activeAssetUrl={assetUrl} selectedBoneId={selectedBoneId} showGrid={showGrid} onSelectBone={setSelectedBoneId} />
+        </ErrorBoundary>
+      );
     }
     return (
       <Artboard

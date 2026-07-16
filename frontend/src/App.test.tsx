@@ -66,6 +66,41 @@ describe("Studio workbench layout", () => {
     });
   });
 
+  it("seeds frame 24 with a non-identity default pose so a fresh rig animates on playback", async () => {
+    render(<App />);
+
+    act(() => {
+      useProjectStore.setState({ project: makeProject() });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftShoulder", { x: 0.3, y: 0.3 });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftElbow", { x: 0.4, y: 0.5 });
+    });
+
+    await waitFor(() => {
+      const keyframes = useProjectStore.getState().project?.timeline.keyframes ?? [];
+      expect(keyframes.find((keyframe) => keyframe.frame === 24)).toBeDefined();
+    });
+
+    const keyframes = useProjectStore.getState().project!.timeline.keyframes;
+    const frame0 = keyframes.find((keyframe) => keyframe.frame === 0)!;
+    const frame24 = keyframes.find((keyframe) => keyframe.frame === 24)!;
+
+    // Frame 0 stays the empty "before" pose - the user poses it by hand.
+    expect(frame0.pose).toEqual({});
+
+    // Frame 24 must give at least one bone a non-identity transform, otherwise
+    // interpolatePose falls back to each bone's rest transform and playback
+    // shows zero motion.
+    const bonePoses = Object.values(frame24.pose);
+    expect(bonePoses.length).toBeGreaterThan(0);
+    expect(
+      bonePoses.some((pose) => pose.rotation.some((value) => value !== 0) || pose.position.some((value) => value !== 0)),
+    ).toBe(true);
+  });
+
   it("toggles aria-expanded on the inspector collapse control when it is collapsed", () => {
     render(<App />);
 

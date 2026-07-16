@@ -1,4 +1,4 @@
-import type { Bone, JointName, Point, SelectionRect } from "../types/project";
+import type { Bone, JointName, Point, Pose, SelectionRect } from "../types/project";
 
 type BoneDefinition = Omit<Bone, "selection">;
 
@@ -33,4 +33,22 @@ export function deriveBones(joints: Partial<Record<JointName, Point>>): Bone[] {
     if (!start || !end) return [];
     return [{ ...definition, selection: selectionBetween(start, end) }];
   });
+}
+
+// A freshly-rigged puppet has no keyframes yet, so App seeds an initial two-frame
+// timeline. Leaving frame 24 at each bone's identity pose meant playback showed
+// zero motion until the user hand-posed every bone. This gives every bone a
+// modest, non-uniform yaw so a fresh rig animates visibly out of the box:
+// left/right-prefixed bones rotate in opposite directions (so limbs don't snap
+// in lockstep) and the magnitude is nudged per bone id so it reads as a natural
+// pose shift rather than a robotic, identical rotation on every limb.
+export function createDefaultPose(bones: Bone[]): Pose {
+  const pose: Pose = {};
+  bones.forEach((bone) => {
+    const sign = bone.id.toLowerCase().startsWith("right") ? -1 : 1;
+    const hash = [...bone.id].reduce((total, char) => total + char.charCodeAt(0), 0);
+    const magnitude = Math.PI / 16 + (hash % 5) * 0.045; // ~11deg to ~21deg
+    pose[bone.id] = { rotation: [0, sign * magnitude, 0], position: [0, 0, 0] };
+  });
+  return pose;
 }
