@@ -347,6 +347,71 @@ describe("useProjectStore", () => {
       expect(useProjectStore.getState().project).toBeNull();
     });
 
+    it("deleteKeyframe refuses to remove the last remaining keyframe", () => {
+      useProjectStore.setState({
+        project: makeProject({
+          id: 9,
+          timeline: { fps: 24, keyframes: [{ frame: 12, pose: {} }] },
+        }),
+      });
+
+      useProjectStore.getState().deleteKeyframe(12);
+
+      expect(useProjectStore.getState().project!.timeline.keyframes).toEqual([{ frame: 12, pose: {} }]);
+    });
+
+    it("setKeyframeEasing sets the easing field on the keyframe at the given frame", () => {
+      useProjectStore.setState({
+        project: makeProject({
+          id: 9,
+          timeline: {
+            fps: 24,
+            keyframes: [
+              { frame: 0, pose: {} },
+              { frame: 24, pose: {} },
+            ],
+          },
+        }),
+      });
+
+      useProjectStore.getState().setKeyframeEasing(24, "easeInOut");
+
+      const { keyframes } = useProjectStore.getState().project!.timeline;
+      expect(keyframes).toEqual([
+        { frame: 0, pose: {} },
+        { frame: 24, pose: {}, easing: "easeInOut" },
+      ]);
+    });
+
+    it("setKeyframeEasing leaves other keyframes untouched", () => {
+      useProjectStore.setState({
+        project: makeProject({
+          id: 9,
+          timeline: {
+            fps: 24,
+            keyframes: [
+              { frame: 0, pose: {}, easing: "easeInOut" },
+              { frame: 24, pose: {} },
+            ],
+          },
+        }),
+      });
+
+      useProjectStore.getState().setKeyframeEasing(24, "linear");
+
+      const { keyframes } = useProjectStore.getState().project!.timeline;
+      expect(keyframes.find((keyframe) => keyframe.frame === 0)!.easing).toBe("easeInOut");
+      expect(keyframes.find((keyframe) => keyframe.frame === 24)!.easing).toBe("linear");
+    });
+
+    it("setKeyframeEasing does nothing without an active project", () => {
+      useProjectStore.setState({ project: null });
+
+      useProjectStore.getState().setKeyframeEasing(0, "easeInOut");
+
+      expect(useProjectStore.getState().project).toBeNull();
+    });
+
     it("setPlaying(true) advances the playhead frame by frame at the project's fps", () => {
       vi.useFakeTimers();
       useProjectStore.setState({

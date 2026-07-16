@@ -1,6 +1,6 @@
 import type { CSSProperties, PointerEvent } from "react";
 
-import type { Keyframe } from "../../types/project";
+import type { Easing, Keyframe } from "../../types/project";
 
 type TimelineProps = {
   frame: number;
@@ -9,15 +9,18 @@ type TimelineProps = {
   onFrameChange: (frame: number) => void;
   onPlayToggle: () => void;
   onSaveKeyframe: () => void;
+  onEasingChange: (easing: Easing) => void;
 };
 
 const frameStyle = (frame: number): CSSProperties => ({ "--frame-position": `${(frame / 24) * 100}%` } as CSSProperties);
 
-export function Timeline({ frame, keyframes, playing, onFrameChange, onPlayToggle, onSaveKeyframe }: TimelineProps) {
+export function Timeline({ frame, keyframes, playing, onFrameChange, onPlayToggle, onSaveKeyframe, onEasingChange }: TimelineProps) {
   const scrub = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     onFrameChange(Math.round(Math.max(0, Math.min(24, ((event.clientX - rect.left) / rect.width) * 24))));
   };
+
+  const currentKeyframe = keyframes.find((keyframe) => keyframe.frame === frame);
 
   return (
     <div className="timeline">
@@ -28,6 +31,16 @@ export function Timeline({ frame, keyframes, playing, onFrameChange, onPlayToggl
           <span><b>{String(frame).padStart(2, "0")}</b> / 24</span>
         </div>
         <div className="timeline-title"><span className="record-dot" />POSE TIMELINE <em>24 FPS</em></div>
+        <select
+          className="quiet-select"
+          aria-label="Easing for current keyframe"
+          disabled={!currentKeyframe}
+          value={currentKeyframe?.easing ?? "linear"}
+          onChange={(event) => onEasingChange(event.target.value as Easing)}
+        >
+          <option value="linear">Linear</option>
+          <option value="easeInOut">Ease in-out</option>
+        </select>
         <button className="quiet-button" onClick={onSaveKeyframe}>Save keyframe</button>
       </div>
       <div className="ruler" onPointerDown={scrub} onPointerMove={(event) => event.buttons === 1 && scrub(event)}>

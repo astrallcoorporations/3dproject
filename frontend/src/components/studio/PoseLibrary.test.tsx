@@ -58,6 +58,30 @@ describe("PoseLibrary", () => {
     expect(screen.queryByRole("button", { name: /Edit keyframe/ })).not.toBeInTheDocument();
   });
 
+  it("disables the Delete button when only one keyframe remains", () => {
+    render(
+      <PoseLibrary
+        keyframes={[{ frame: 12, pose: {} }]}
+        playhead={12}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onReturnToRig={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Delete keyframe 12" })).toBeDisabled();
+  });
+
+  it("keeps Delete enabled for every keyframe when more than one exists", () => {
+    render(
+      <PoseLibrary keyframes={keyframes} playhead={0} onEdit={vi.fn()} onDelete={vi.fn()} onReturnToRig={vi.fn()} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Delete keyframe 0" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete keyframe 12" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete keyframe 24" })).not.toBeDisabled();
+  });
+
   it("calls onReturnToRig when the return link is clicked", () => {
     const onReturnToRig = vi.fn();
     render(

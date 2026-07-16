@@ -27,12 +27,16 @@ export function PoseLibrary({ keyframes, playhead, onEdit, onDelete, onReturnToR
           <span>{String(keyframe.frame).padStart(2, "0")}</span>
           <div>
             <b>Frame {String(keyframe.frame).padStart(2, "0")}</b>
-            <small>Keyed</small>
+            <small>{keyframe.easing === "easeInOut" ? "Ease in-out" : "Linear"}</small>
           </div>
           <button onClick={() => onEdit(keyframe.frame)} aria-label={`Edit keyframe ${keyframe.frame}`}>
             Edit
           </button>
-          <button onClick={() => onDelete(keyframe.frame)} aria-label={`Delete keyframe ${keyframe.frame}`}>
+          <button
+            onClick={() => onDelete(keyframe.frame)}
+            aria-label={`Delete keyframe ${keyframe.frame}`}
+            disabled={ordered.length <= 1}
+          >
             Delete
           </button>
         </div>

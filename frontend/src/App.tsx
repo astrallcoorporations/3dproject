@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import { api } from "./lib/api";
-import { interpolatePose } from "./lib/interpolation";
+import { applyEasing, interpolatePose } from "./lib/interpolation";
 import { createDefaultPose } from "./lib/skeleton";
 import { ProxyScene } from "./components/scene/ProxyScene";
 import { Artboard } from "./components/studio/Artboard";
@@ -29,7 +29,10 @@ const poseAtFrame = (keyframes: Keyframe[], frame: number): Pose => {
   if (!after) return ordered[ordered.length - 1].pose;
   const before = [...ordered].reverse().find((keyframe) => keyframe.frame <= frame)!;
   if (before.frame === after.frame) return before.pose;
-  return interpolatePose(before.pose, after.pose, (frame - before.frame) / (after.frame - before.frame));
+  // The easing chosen for a keyframe shapes the segment leading into it -
+  // apply it to the raw progress fraction before handing it to interpolatePose.
+  const t = applyEasing((frame - before.frame) / (after.frame - before.frame), after.easing ?? "linear");
+  return interpolatePose(before.pose, after.pose, t);
 };
 
 export default function App() {
@@ -67,6 +70,7 @@ export default function App() {
   const storeUpdateDraftPose = useProjectStore((state) => state.updateDraftPose);
   const storeSaveKeyframe = useProjectStore((state) => state.saveKeyframe);
   const storeDeleteKeyframe = useProjectStore((state) => state.deleteKeyframe);
+  const storeSetKeyframeEasing = useProjectStore((state) => state.setKeyframeEasing);
 
   const [showGrid, setShowGrid] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -154,6 +158,12 @@ export default function App() {
     if (!project || !rig.bones.length) return;
     storeSaveKeyframe(playhead);
     setNotice(`Pose saved at frame ${playhead}.`);
+  };
+
+  const changeEasing = (easing: Keyframe["easing"]) => {
+    if (!project || !easing) return;
+    storeSetKeyframeEasing(playhead, easing);
+    setNotice(`Frame ${playhead} now eases ${easing === "easeInOut" ? "in and out" : "linearly"}.`);
   };
 
   const persist = async () => {
@@ -278,7 +288,7 @@ export default function App() {
     />
   );
 
-  const timelinePanel = rig.bones.length ? <Timeline frame={playhead} keyframes={timeline.keyframes} playing={playing} onFrameChange={(frame) => { setPlaying(false); setPlayhead(frame); }} onPlayToggle={() => { if (!timeline.keyframes.length) setNotice("Place joints and save a pose first."); else setPlaying(!playing); }} onSaveKeyframe={saveKeyframe} /> : <div className="timeline dormant"><div className="timeline-toolbar"><span>POSE TIMELINE</span><em>Build a connected rig to unlock 24 fps playback.</em></div></div>;
+  const timelinePanel = rig.bones.length ? <Timeline frame={playhead} keyframes={timeline.keyframes} playing={playing} onFrameChange={(frame) => { setPlaying(false); setPlayhead(frame); }} onPlayToggle={() => { if (!timeline.keyframes.length) setNotice("Place joints and save a pose first."); else setPlaying(!playing); }} onSaveKeyframe={saveKeyframe} onEasingChange={changeEasing} /> : <div className="timeline dormant"><div className="timeline-toolbar"><span>POSE TIMELINE</span><em>Build a connected rig to unlock 24 fps playback.</em></div></div>;
 
   return <>
     <input id="art-upload" className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFile} />

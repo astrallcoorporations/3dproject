@@ -36,7 +36,8 @@ export type Rig = {
 
 export type BonePose = { rotation: [number, number, number]; position: [number, number, number] };
 export type Pose = Record<string, BonePose>;
-export type Keyframe = { frame: number; pose: Pose };
+export type Easing = "linear" | "easeInOut";
+export type Keyframe = { frame: number; pose: Pose; easing?: Easing };
 
 export type Timeline = { fps: number; keyframes: Keyframe[] };
 

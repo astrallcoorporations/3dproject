@@ -101,6 +101,63 @@ describe("Studio workbench layout", () => {
     ).toBe(true);
   });
 
+  it("animate rail lists every saved keyframe, not just frame 0 and 24", async () => {
+    render(<App />);
+
+    act(() => {
+      useProjectStore.setState({ project: makeProject() });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftShoulder", { x: 0.3, y: 0.3 });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftElbow", { x: 0.4, y: 0.5 });
+    });
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.timeline.keyframes.length).toBe(2);
+    });
+
+    act(() => {
+      useProjectStore.setState({ mode: "animate" });
+    });
+    act(() => {
+      useProjectStore.getState().setPlayhead(12);
+      useProjectStore.getState().saveKeyframe(12);
+    });
+
+    expect(screen.getByText("Frame 00")).toBeInTheDocument();
+    expect(screen.getByText("Frame 12")).toBeInTheDocument();
+    expect(screen.getByText("Frame 24")).toBeInTheDocument();
+  });
+
+  it("changing the easing control for the keyframe at the playhead updates the timeline", async () => {
+    render(<App />);
+
+    act(() => {
+      useProjectStore.setState({ project: makeProject() });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftShoulder", { x: 0.3, y: 0.3 });
+    });
+    act(() => {
+      useProjectStore.getState().placeJoint("leftElbow", { x: 0.4, y: 0.5 });
+    });
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project?.timeline.keyframes.find((k) => k.frame === 24)).toBeDefined();
+    });
+
+    act(() => {
+      useProjectStore.setState({ mode: "animate", playhead: 24 });
+    });
+
+    fireEvent.change(screen.getByLabelText("Easing for current keyframe"), { target: { value: "easeInOut" } });
+
+    const keyframe = useProjectStore.getState().project!.timeline.keyframes.find((k) => k.frame === 24);
+    expect(keyframe?.easing).toBe("easeInOut");
+  });
+
   it("toggles aria-expanded on the inspector collapse control when it is collapsed", () => {
     render(<App />);
 

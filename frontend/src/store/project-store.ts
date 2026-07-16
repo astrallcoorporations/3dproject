@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { api } from "../lib/api";
 import { ACTIVE_PROJECT_STORAGE_KEY, safeStorage } from "../lib/local-storage";
 import { deriveBones } from "../lib/skeleton";
-import type { Asset, BonePose, JointName, Mode, Point, Pose, ProjectRecord, SelectionRect } from "../types/project";
+import type { Asset, BonePose, Easing, JointName, Mode, Point, Pose, ProjectRecord, SelectionRect } from "../types/project";
 
 export { ACTIVE_PROJECT_STORAGE_KEY };
 
@@ -49,6 +49,7 @@ type ProjectActions = {
   updateDraftPose: (boneId: string, field: "rotation" | "position", axis: number, value: number) => void;
   saveKeyframe: (frame: number) => void;
   deleteKeyframe: (frame: number) => void;
+  setKeyframeEasing: (frame: number, easing: Easing) => void;
   reset: () => void;
 };
 
@@ -160,7 +161,26 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       const { project } = get();
       if (!project) return;
       const keyframes = project.timeline.keyframes.filter((keyframe) => keyframe.frame !== frame);
+      // No-op if the frame didn't match anything, and refuse to leave the
+      // timeline with zero keyframes. poseAtFrame/blankPose fall back to a
+      // rest pose fine with zero keyframes, but the pose library always
+      // keeps at least one so a rig never loses its only saved pose.
       if (keyframes.length === project.timeline.keyframes.length) return;
+      if (!keyframes.length) return;
+      set({
+        project: {
+          ...project,
+          timeline: { ...project.timeline, keyframes },
+        },
+      });
+    },
+
+    setKeyframeEasing: (frame, easing) => {
+      const { project } = get();
+      if (!project) return;
+      const keyframes = project.timeline.keyframes.map((keyframe) =>
+        keyframe.frame === frame ? { ...keyframe, easing } : keyframe,
+      );
       set({
         project: {
           ...project,
