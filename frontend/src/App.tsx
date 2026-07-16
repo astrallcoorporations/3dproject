@@ -64,9 +64,12 @@ export default function App() {
   const playhead = useProjectStore((state) => state.playhead);
   const playing = useProjectStore((state) => state.playing);
   const draftPose = useProjectStore((state) => state.draftPose);
+  const sketchMode = useProjectStore((state) => state.sketchMode);
   const setPlayhead = useProjectStore((state) => state.setPlayhead);
   const setPlaying = useProjectStore((state) => state.setPlaying);
   const setDraftPose = useProjectStore((state) => state.setDraftPose);
+  const setDraftSketch = useProjectStore((state) => state.setDraftSketch);
+  const setSketchMode = useProjectStore((state) => state.setSketchMode);
   const storeUpdateDraftPose = useProjectStore((state) => state.updateDraftPose);
   const storeSaveKeyframe = useProjectStore((state) => state.saveKeyframe);
   const storeDeleteKeyframe = useProjectStore((state) => state.deleteKeyframe);
@@ -158,6 +161,11 @@ export default function App() {
     if (!project || !rig.bones.length) return;
     storeSaveKeyframe(playhead);
     setNotice(`Pose saved at frame ${playhead}.`);
+  };
+
+  const clearSketch = () => {
+    setDraftSketch([]);
+    setNotice("Sketch cleared.");
   };
 
   const changeEasing = (easing: Keyframe["easing"]) => {
@@ -262,8 +270,11 @@ export default function App() {
       selectedBoneId={selectedBoneId}
       selectedPose={selectedPose}
       cropMode={cropMode}
+      sketchMode={sketchMode}
       inspectorOpen={inspectorOpen}
       onCropModeChange={setCropMode}
+      onSketchModeChange={setSketchMode}
+      onClearSketch={clearSketch}
       onSelectBone={setSelectedBoneId}
       onPoseChange={updateSelectedPose}
       onCollapse={() => setInspectorOpen(false)}

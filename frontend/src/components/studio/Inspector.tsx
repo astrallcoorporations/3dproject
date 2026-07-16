@@ -12,7 +12,7 @@ type InspectorProps = {
   onCropModeChange: (value: boolean) => void;
   onSketchModeChange: (value: boolean) => void;
   onClearSketch: () => void;
-  onSelectBone: (boneId: string) => void;
+  onSelectBone: (boneId: string | null) => void;
   onPoseChange: (field: "rotation" | "position", axis: number, value: number) => void;
   onCollapse: () => void;
 };
