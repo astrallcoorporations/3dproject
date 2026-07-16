@@ -198,6 +198,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       if (!storedId) return null;
       try {
         const restored = await api.getProject(Number(storedId));
+        if (get().project) return get().project;
         set({ project: restored });
         return restored;
       } catch {
